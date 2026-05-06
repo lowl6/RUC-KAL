@@ -108,6 +108,38 @@ npm run dev
 
 ## MySQL 与 Docker Compose
 
+### 服务器部署（Docker Compose）
+
+仓库地址：`https://github.com/lowl6/RUC-KAL.git`
+
+第一次部署到服务器：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lowl6/RUC-KAL/master/deploy/server-bootstrap.sh -o /tmp/kal-bootstrap.sh
+bash /tmp/kal-bootstrap.sh
+```
+
+部署完成后访问：
+
+- 前台：`http://47.238.235.51:3000/`
+- 管理后台：`http://47.238.235.51:3000/admin/login`
+
+后续更新：
+
+```bash
+cd /opt/ruc-kal
+bash deploy/update.sh
+```
+
+生产密钥保存在服务器 `/opt/ruc-kal/.env`，不要提交到 GitHub。若要开启真实邮件发送，编辑 `.env`：
+
+```bash
+KAL_MAIL_ENABLED=true
+KAL_SMTP_USER=<SMTP邮箱账号>
+KAL_SMTP_PASS=<SMTP客户端授权码>
+KAL_MAIL_FROM=KAL 知行创坊 <SMTP邮箱账号>
+```
+
 ### 本机 MySQL 运行
 
 后端默认使用 H2 内存库；如需连接本机 MySQL，先创建数据库：
