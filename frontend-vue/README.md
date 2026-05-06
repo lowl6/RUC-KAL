@@ -10,16 +10,7 @@ cd frontend-vue; npm run dev
 
 $pids = (netstat -ano | Select-String ':8080\s+.*LISTENING' | ForEach-Object { ($_ -split '\s+')[-1] } | Sort-Object -Unique); if ($pids) { $pids | ForEach-Object { Stop-Process -Id ([int]$_) -Force; Write-Host "stopped backend pid $_" } } else { Write-Host 'no backend on 8080' }
 
-超级管理员：admin@ruc.edu.cn / Admin@2026
-普通管理员：ops@ruc.edu.cn / Admin@2026
-学生 / 教师：li.yan@ruc.edu.cn 等 / Kal@2026
 
-超级管理员
-kal-superadmin@ruc.edu.cn
-Kal#Super-2026@Admin
-运营管理员
-kal-ops@ruc.edu.cn
-Kal#Ops-2026@Console
 
 ## 技术栈
 
