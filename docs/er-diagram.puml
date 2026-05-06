@@ -1,0 +1,543 @@
+@startuml KAL-ER
+' =====================================================================
+'  知行创坊 KNOWACT Lab (KAL) - 数据库 ER 图
+'  范围：核心业务实体（用户/项目卡/个人卡/私信/比赛/论坛/审核）
+'  版本：v1.0   2026-05
+' =====================================================================
+
+' --------- 视觉设置 ---------
+!define PK(x)        <b><color:#B8860B>x</color></b>
+!define FK(x)        <i><color:#1E6FBA>x</color></i>
+!define UNIQUE(x)    <u>x</u>
+
+skinparam linetype ortho
+skinparam backgroundColor #FAFAFA
+skinparam classBackgroundColor #FFFFFF
+skinparam classBorderColor #861a12
+skinparam classFontColor #2b2b2b
+skinparam classHeaderBackgroundColor #f3e6e3
+skinparam shadowing false
+skinparam roundcorner 6
+skinparam padding 4
+hide circle
+hide methods
+
+title 知行创坊 KAL - 数据库 ER 图（v1.0）
+
+' =====================================================================
+'  模块一：用户与设置
+' =====================================================================
+package "用户与设置" #f7f1ee {
+
+  entity "User\n用户" as User {
+    PK(user_id) : VARCHAR(32)
+    --
+    UNIQUE(email)  : VARCHAR(64)
+    password_hash  : VARCHAR(96)
+    name           : VARCHAR(32)
+    display_name   : VARCHAR(32)
+    ruc_id         : VARCHAR(20)  <<CAS>>
+    FK(dept_code)  : VARCHAR(16)
+    grade          : VARCHAR(8)
+    role           : ENUM(student,teacher,admin,super_admin)
+    admin_perms    : JSON
+    source         : ENUM(self_register,admin_created,cas)
+    FK(created_by_admin_id) : VARCHAR(32)
+    phone          : VARCHAR(20)
+    wechat_id      : VARCHAR(32)
+    avatar_url     : VARCHAR(255)
+    status         : ENUM(active,disabled,banned,pending_first_login)
+    ban_reason     : VARCHAR(255)
+    ban_expire_at  : DATETIME
+    last_login_at  : DATETIME
+    last_login_ip  : VARCHAR(45)
+    created_at     : DATETIME
+    updated_at     : DATETIME
+  }
+
+  entity "ActivationToken\n激活令牌" as ActivationToken {
+    PK(token)        : VARCHAR(64)
+    --
+    FK(user_id)      : VARCHAR(32)
+    purpose          : ENUM(activate,reset_password)
+    expires_at       : DATETIME
+    used_at          : DATETIME
+    created_by       : VARCHAR(32)
+    created_at       : DATETIME
+  }
+
+  entity "Department\n院系字典" as Department {
+    PK(dept_code) : VARCHAR(16)
+    --
+    name : VARCHAR(64)
+  }
+
+  entity "UserSettings\n用户设置" as UserSettings {
+    PK(user_id) : VARCHAR(32)  <<PK,FK>>
+    --
+    privacy_show_dept       : BOOL
+    privacy_show_grade      : BOOL
+    privacy_show_realname   : BOOL
+    notify_new_apply        : BOOL
+    notify_new_message      : BOOL
+    notify_deadline_remind  : BOOL
+    notify_forum_reply      : BOOL
+    wechat_id               : VARCHAR(32)
+  }
+}
+
+User "1" --right--> "0..1" UserSettings : has
+User "*" --up--> "0..1" Department : 属于
+User "1" --> "*" ActivationToken    : 持有
+User "1" --> "*" User               : 创建(admin_created)
+
+' =====================================================================
+'  模块二：项目卡
+' =====================================================================
+package "项目卡系统" #f4ecea {
+
+  entity "ProjectCard\n项目卡" as ProjectCard {
+    PK(project_id)   : VARCHAR(32)
+    --
+    FK(creator_id)   : VARCHAR(32)
+    project_name     : VARCHAR(20)
+    one_liner        : VARCHAR(30)
+    project_type     : ENUM
+    FK(competition_id): VARCHAR(32)
+    competition_target : ENUM
+    competition_deadline : DATE
+    team_deadline    : DATE
+    current_members  : INT
+    weekly_hours     : INT
+    project_detail   : VARCHAR(500)
+    contact_wechat   : VARCHAR(32)
+    status           : ENUM(recruiting,completed,closed)
+    view_count       : INT
+    apply_count      : INT
+    created_at       : DATETIME
+    updated_at       : DATETIME
+  }
+
+  entity "ProjectRole\n项目所需角色" as ProjectRole {
+    PK(role_id)     : VARCHAR(32)
+    --
+    FK(project_id)  : VARCHAR(32)
+    role_name       : VARCHAR(40)
+    count           : INT
+    skills          : VARCHAR(100)
+    filled          : INT
+  }
+
+  entity "ProjectTag\n项目标签" as ProjectTag {
+    PK(id) : BIGINT
+    --
+    FK(project_id) : VARCHAR(32)
+    tag        : VARCHAR(32)
+    tag_type   : ENUM(role,skill)
+  }
+
+  entity "Application\n申请记录" as Application {
+    PK(application_id) : VARCHAR(32)
+    --
+    FK(project_id)     : VARCHAR(32)
+    FK(applicant_id)   : VARCHAR(32)
+    FK(target_role_id) : VARCHAR(32)
+    message            : VARCHAR(200)
+    status             : ENUM(pending,accepted,rejected,withdrawn)
+    FK(conversation_id): VARCHAR(32)
+    created_at         : DATETIME
+    handled_at         : DATETIME
+  }
+}
+
+User       "1" --> "*" ProjectCard      : 创建
+ProjectCard "1" --> "*" ProjectRole     : 含
+ProjectCard "1" --> "*" ProjectTag      : 含
+ProjectCard "1" --> "*" Application     : 收到
+User       "1" --> "*" Application      : 发起
+ProjectRole "1" --> "*" Application     : 期望
+
+' =====================================================================
+'  模块三：个人卡
+' =====================================================================
+package "个人卡系统" #f4ecea {
+
+  entity "PersonalCard\n个人卡" as PersonalCard {
+    PK(card_id)       : VARCHAR(32)
+    --
+    UNIQUE(FK(user_id)) : VARCHAR(32)
+    display_name      : VARCHAR(32)
+    target_role       : ENUM
+    weekly_hours      : INT
+    vacation_available: BOOL
+    self_intro        : VARCHAR(300)
+    contact_wechat    : VARCHAR(32)
+    is_visible        : BOOL
+    view_count        : INT
+    invite_count      : INT
+    created_at        : DATETIME
+    updated_at        : DATETIME
+  }
+
+  entity "PersonalSkill\n技能标签" as PersonalSkill {
+    PK(id)           : BIGINT
+    --
+    FK(card_id)      : VARCHAR(32)
+    skill            : VARCHAR(32)
+  }
+
+  entity "PersonalCompetitionInterest\n感兴趣比赛" as PersonalInterest {
+    PK(id)           : BIGINT
+    --
+    FK(card_id)      : VARCHAR(32)
+    competition      : ENUM
+  }
+}
+
+User         "1" --> "0..1" PersonalCard : 拥有
+PersonalCard "1" --> "*"   PersonalSkill : 含
+PersonalCard "1" --> "*"   PersonalInterest : 兴趣
+
+' =====================================================================
+'  模块四：私信
+' =====================================================================
+package "私信系统" #eee9e7 {
+
+  entity "Conversation\n会话" as Conversation {
+    PK(conversation_id) : VARCHAR(32)
+    --
+    FK(participant_a_id): VARCHAR(32)
+    FK(participant_b_id): VARCHAR(32)
+    FK(project_id)      : VARCHAR(32)
+    FK(card_id)         : VARCHAR(32)
+    last_message_at     : DATETIME
+    expires_at          : DATETIME
+    final_delete_at     : DATETIME
+    status              : ENUM(active,expired,deleted)
+    created_at          : DATETIME
+  }
+
+  entity "Message\n私信消息" as Message {
+    PK(message_id)      : VARCHAR(32)
+    --
+    FK(conversation_id) : VARCHAR(32)
+    FK(sender_id)       : VARCHAR(32)
+    content             : VARCHAR(500)
+    msg_type            : ENUM(text,system,wechat,project_link)
+    sent_at             : DATETIME
+    read_at             : DATETIME
+  }
+
+  entity "ConversationRead\n阅读位点" as ConversationRead {
+    PK(conversation_id) : VARCHAR(32)
+    PK(user_id)         : VARCHAR(32)
+    --
+    last_read_message_id: VARCHAR(32)
+    last_read_at        : DATETIME
+    unread_count        : INT
+  }
+}
+
+User         "*" --> "*" Conversation     : 参与
+Conversation "1" --> "*" Message          : 含
+Conversation "1" --> "*" ConversationRead : 阅读位点
+User         "1" --> "*" Message          : 发送
+ProjectCard  "1" --> "*" Conversation     : 关联
+PersonalCard "1" --> "*" Conversation     : 关联
+
+' =====================================================================
+'  模块五：比赛中心 & 资讯
+' =====================================================================
+package "比赛中心" #f1ebe9 {
+
+  entity "Competition\n比赛" as Competition {
+    PK(competition_id) : VARCHAR(32)
+    --
+    name           : VARCHAR(80)
+    short_name     : VARCHAR(32)
+    level          : ENUM(national,provincial,school)
+    organizer      : VARCHAR(120)
+    description    : TEXT
+    register_start : DATE
+    register_end   : DATE
+    official_url   : VARCHAR(255)
+    poster_url     : VARCHAR(255)
+    status         : ENUM(upcoming,active,urgent,closed)
+    project_count  : INT
+    FK(created_by) : VARCHAR(32)
+    created_at     : DATETIME
+  }
+
+  entity "News\n比赛资讯" as News {
+    PK(news_id)         : VARCHAR(32)
+    --
+    title               : VARCHAR(80)
+    summary             : VARCHAR(120)
+    content_md          : TEXT
+    source              : VARCHAR(40)
+    FK(related_competition) : VARCHAR(32)
+    cover_url           : VARCHAR(255)
+    view_count          : INT
+    status              : ENUM(draft,published,archived)
+    FK(author_id)       : VARCHAR(32)
+    created_at          : DATETIME
+  }
+}
+
+Competition "1" --> "*" ProjectCard : 关联
+Competition "1" --> "*" News        : 关联
+User        "1" --> "*" News        : 发布(管理员)
+User        "1" --> "*" Competition : 录入(管理员)
+
+' =====================================================================
+'  模块六：创坊论坛
+' =====================================================================
+package "创坊论坛" #f3edec {
+
+  entity "ForumPost\n帖子" as ForumPost {
+    PK(post_id)     : VARCHAR(32)
+    --
+    FK(author_id)   : VARCHAR(32)
+    title           : VARCHAR(60)
+    content_md      : TEXT
+    topic           : ENUM
+    status          : ENUM(normal,pinned,hidden)
+    is_essence      : BOOL
+    view_count      : INT
+    reply_count     : INT
+    like_count      : INT
+    last_reply_at   : DATETIME
+    created_at      : DATETIME
+  }
+
+  entity "ForumComment\n评论" as ForumComment {
+    PK(comment_id)  : VARCHAR(32)
+    --
+    FK(post_id)     : VARCHAR(32)
+    FK(parent_id)   : VARCHAR(32)
+    FK(author_id)   : VARCHAR(32)
+    content         : VARCHAR(500)
+    like_count      : INT
+    status          : ENUM(normal,hidden)
+    created_at      : DATETIME
+  }
+
+  entity "PostTag\n帖子话题标签" as PostTag {
+    PK(id)          : BIGINT
+    --
+    FK(post_id)     : VARCHAR(32)
+    tag             : VARCHAR(32)
+  }
+
+  entity "Topic\n热门话题" as Topic {
+    PK(tag)         : VARCHAR(32)
+    --
+    post_count      : INT
+    last_used_at    : DATETIME
+  }
+
+  entity "PostLike\n点赞" as PostLike {
+    PK(post_id)     : VARCHAR(32)
+    PK(user_id)     : VARCHAR(32)
+    --
+    created_at      : DATETIME
+  }
+
+  entity "PostFavorite\n收藏" as PostFavorite {
+    PK(post_id)     : VARCHAR(32)
+    PK(user_id)     : VARCHAR(32)
+    --
+    created_at      : DATETIME
+  }
+
+  entity "CommentLike\n评论点赞" as CommentLike {
+    PK(comment_id)  : VARCHAR(32)
+    PK(user_id)     : VARCHAR(32)
+    --
+    created_at      : DATETIME
+  }
+}
+
+User         "1" --> "*" ForumPost   : 发表
+ForumPost    "1" --> "*" ForumComment: 含
+User         "1" --> "*" ForumComment: 评论
+ForumPost    "1" --> "*" PostTag     : 话题
+ForumPost    "*" --> "*" PostLike    : <<点赞>>
+ForumPost    "*" --> "*" PostFavorite: <<收藏>>
+ForumComment "*" --> "*" CommentLike : <<点赞>>
+ForumComment "0..1" -down-> "*" ForumComment : 楼中楼
+
+' =====================================================================
+'  模块七：审核 / 通知
+' =====================================================================
+package "运营管理" #ece5e3 {
+
+  entity "Report\n举报" as Report {
+    PK(report_id)    : VARCHAR(32)
+    --
+    content_type     : ENUM
+    content_id       : VARCHAR(32)
+    FK(reporter_id)  : VARCHAR(32)
+    reason           : VARCHAR(200)
+    status           : ENUM(pending,handled,rejected)
+    FK(moderator_id) : VARCHAR(32)
+    moderator_action : ENUM(none,hide,delete,warn,ban)
+    handled_at       : DATETIME
+    created_at       : DATETIME
+  }
+
+  entity "ModerationLog\n自动审核日志" as ModerationLog {
+    PK(log_id)        : BIGINT
+    --
+    content_type      : ENUM
+    content_id        : VARCHAR(32)
+    auto_filter_result: ENUM(pass,warning,block)
+    FK(rule_id)       : VARCHAR(32)
+    keyword_hit       : VARCHAR(255)
+    FK(moderator_id)  : VARCHAR(32)
+    action            : ENUM
+    created_at        : DATETIME
+  }
+
+  entity "Notification\n站内通知" as Notification {
+    PK(notification_id) : VARCHAR(32)
+    --
+    FK(user_id)       : VARCHAR(32)
+    type              : ENUM(new_apply,new_message,deadline,forum_reply,system,broadcast)
+    ref_type          : ENUM
+    ref_id            : VARCHAR(32)
+    content           : VARCHAR(255)
+    is_read           : BOOL
+    FK(created_by)    : VARCHAR(32)  <<admin广播时填>>
+    created_at        : DATETIME
+  }
+}
+
+' =====================================================================
+'  模块八：管理后台（RBAC / 审计 / 配置）
+' =====================================================================
+package "管理后台" #e7dedb {
+
+  entity "RoleTemplate\n权限模板" as RoleTemplate {
+    PK(template_id)  : VARCHAR(32)
+    --
+    UNIQUE(name)     : VARCHAR(32)
+    description      : VARCHAR(255)
+    perms            : JSON
+    built_in         : BOOL
+    FK(created_by)   : VARCHAR(32)
+    created_at       : DATETIME
+    updated_at       : DATETIME
+  }
+
+  entity "KeywordRule\n敏感词规则" as KeywordRule {
+    PK(rule_id)      : VARCHAR(32)
+    --
+    keyword          : VARCHAR(120)
+    match_type       : ENUM(contains,regex)
+    action           : ENUM(warn,block)
+    scope            : JSON      <<内容类型数组>>
+    enabled          : BOOL
+    hit_count        : INT
+    FK(created_by)   : VARCHAR(32)
+    created_at       : DATETIME
+    updated_at       : DATETIME
+  }
+
+  entity "SystemConfig\n系统配置(KV)" as SystemConfig {
+    PK(config_key)   : VARCHAR(64)
+    --
+    config_value     : TEXT
+    scope            : VARCHAR(32)
+    description      : VARCHAR(255)
+    FK(updated_by)   : VARCHAR(32)
+    updated_at       : DATETIME
+  }
+
+  entity "AuditLog\n管理员操作审计" as AuditLog {
+    PK(log_id)         : BIGINT
+    --
+    FK(actor_id)       : VARCHAR(32)
+    actor_role         : ENUM
+    action             : VARCHAR(64)   <<动作码>>
+    target_type        : VARCHAR(32)
+    target_id          : VARCHAR(32)
+    before_snapshot    : JSON
+    after_snapshot     : JSON
+    reason             : VARCHAR(255)
+    ip                 : VARCHAR(45)
+    user_agent         : VARCHAR(255)
+    created_at         : DATETIME
+  }
+
+  entity "AdminLoginLog\n管理员登录历史" as AdminLoginLog {
+    PK(id)            : BIGINT
+    --
+    FK(admin_id)      : VARCHAR(32)
+    ip                : VARCHAR(45)
+    user_agent        : VARCHAR(255)
+    login_status      : ENUM(success,failed,blocked)
+    failure_reason    : VARCHAR(120)
+    created_at        : DATETIME
+  }
+}
+
+User "1" --> "*" Report          : 提交
+User "1" --> "*" Notification    : 收到
+User "1" --> "*" ModerationLog   : 操作(管理员)
+User "1" --> "*" AuditLog        : 触发(管理员)
+User "1" --> "*" AdminLoginLog   : 登录
+User "1" --> "*" RoleTemplate    : 创建(super_admin)
+User "1" --> "*" KeywordRule     : 维护
+User "1" --> "*" SystemConfig    : 修改
+
+KeywordRule "1" --> "*" ModerationLog : 命中产生
+RoleTemplate ..> User : 引用admin_perms
+
+' =====================================================================
+'  跨模块说明
+' =====================================================================
+note bottom of Application
+  Application 创建时同步落一条
+  Conversation（首消息= "申请加入" 系统消息），
+  conversation_id 回写至本表。
+end note
+
+note bottom of Conversation
+  会话过期：last_message_at + 7 天 = expires_at
+  彻底删除：expires_at + 30 天 = final_delete_at
+  通过 cron 定时任务批量处理
+end note
+
+note bottom of ProjectCard
+  当 status = completed/closed 时
+  从推荐流下架，仅详情页可访问
+end note
+
+note bottom of User
+  统一登录入口，但分两类来源：
+  · self_register：邮箱必须 @ruc.edu.cn
+  · admin_created：由 super_admin 在后台手动添加，
+    邮箱不限域名，status=pending_first_login
+    通过 ActivationToken 一次性链接激活
+  · cas（二期）：人大统一身份认证回填
+  role ∈ {student,teacher} 走 C 端首页；
+  role ∈ {admin,super_admin} 跳 /admin。
+end note
+
+note bottom of AuditLog
+  所有管理员"写"操作经 AuditInterceptor
+  自动落库（含 before/after JSON 快照），
+  应用代码不可绕过、表只读不可删，
+  满足合规与事后追溯。
+end note
+
+note bottom of KeywordRule
+  写入流程：
+   用户提交内容 → KeywordRule 匹配
+   ├─ action=block → 422 拒绝
+   └─ action=warn  → 入 ModerationLog
+                     等待人工 / 进入 Report 队列
+end note
+
+@enduml

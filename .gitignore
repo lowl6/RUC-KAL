@@ -1,0 +1,32 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Runtime logs and local smoke-test artifacts
+*.log
+backend-run*.log
+backend-*-smoke.log
+tok.txt
+
+# Secrets / local environment
+.env
+.env.*
+!.env.example
+
+# Java / Maven
+backend/target/
+**/target/
+
+# Node / Vite
+frontend-vue/node_modules/
+frontend-vue/dist/
+frontend-vue/dist-ssr/
+frontend-vue/*.local
+
+# Generated / temporary
+out/
+tmp/
+temp/

@@ -1,0 +1,166 @@
+/* =========================================================
+ * 知行创坊 KAL · 设计令牌
+ * 颜色 / 字体 / 间距 / 圆角 / 阴影 / 动效
+ * ======================================================= */
+
+:root {
+  /* ========= 人大红（与 frontend/competitions.html 一致） ========= */
+  --ruc-red:        #861a12;
+  --ruc-red-light:  #a15448;
+  --ruc-red-dark:   #610b08;
+  --ruc-red-bg:     #c7bcb9;
+  --ruc-red-hover:  #94352b;
+
+  /* ========= 品牌色（基于人大红延展的 kal 语义阶） ========= */
+  --kal-primary-50:  #fdf3f1;
+  --kal-primary-100: #fbe7e3;
+  --kal-primary-200: #f5c6bd;
+  --kal-primary-300: #ec9d8f;
+  --kal-primary-400: #d96a58;
+  --kal-primary-500: #b53a2a;
+  --kal-primary-600: var(--ruc-red);       /* 主色 = 人大红 */
+  --kal-primary-700: var(--ruc-red-dark); /* 深红 = 人大红 dark */
+  --kal-primary-800: #4a0806;
+  --kal-primary-900: #360605;
+  --kal-primary-hover: var(--ruc-red-hover); /* 悬停：人大红 hover */
+  --kal-primary-tint:  var(--ruc-red-bg);    /* 灰粉辅底 / 弱分隔 */
+
+  /* ========= 辅助色 ========= */
+  --kal-ink:    var(--ruc-red-dark);   /* 深人大红，用于 logo / hero / 海报底 */
+  --kal-ink-soft: var(--ruc-red-hover);
+  --kal-sand:   #b9a288;        /* 暖砂（中性偏暖，做 muted 强调） */
+  --kal-sand-soft: #ede4d6;
+  --kal-paper:  #faf6f0;        /* 米白底（hero / 卡片纸感） */
+  --kal-gold:   #a37b3d;        /* 深暖金（仅用于极少量印章式点缀） */
+  --kal-gold-soft: #efe4d0;
+
+  /* ========= 中性色 ========= */
+  --kal-gray-50:  #fafaf9;
+  --kal-gray-100: #f4f4f3;
+  --kal-gray-200: #e7e5e4;
+  --kal-gray-300: #d6d3d1;
+  --kal-gray-400: #a8a29e;
+  --kal-gray-500: #78716c;
+  --kal-gray-600: #57534e;
+  --kal-gray-700: #44403c;
+  --kal-gray-800: #292524;
+  --kal-gray-900: #1c1917;
+
+  /* ========= 语义色（仅系统提示用，UI 装饰避免使用） ========= */
+  --kal-danger:  var(--kal-primary-700);
+  --kal-danger-bg: var(--kal-primary-50);
+  --kal-warning: #8a6c3d;
+  --kal-warning-bg: var(--kal-gold-soft);
+  --kal-success: #4a5a3f;
+  --kal-success-bg: #ecede4;
+  --kal-info:    var(--kal-gray-700);
+  --kal-info-bg: var(--kal-gray-100);
+
+  /* ========= 表面色（语义化） ========= */
+  --kal-bg:           #f6f3ee;       /* 整体背景（暖纸感米白） */
+  --kal-bg-subtle:    #efeae3;
+  --kal-surface:      #ffffff;       /* 卡片表面 */
+  --kal-surface-2:    var(--kal-gray-50);
+  --kal-overlay:      rgba(28, 25, 23, 0.55);
+  --kal-border:       #eae3d9;       /* 暖中性描边，避免冷灰 */
+  --kal-border-strong:#d8cebf;
+  --kal-divider:      #ece6dc;
+
+  /* ========= 文字色 ========= */
+  --kal-text:         var(--kal-gray-900);
+  --kal-text-strong:  #0c0a09;
+  --kal-text-muted:   var(--kal-gray-600);
+  --kal-text-subtle:  var(--kal-gray-500);
+  --kal-text-on-primary: #ffffff;
+
+  /* ========= 字体 ========= */
+  --kal-font-sans: 'Inter', 'PingFang SC', 'Hiragino Sans GB',
+                   'Microsoft YaHei', system-ui, -apple-system,
+                   BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+                   sans-serif;
+  --kal-font-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC',
+                    'Times New Roman', serif;
+  --kal-font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+
+  /* ========= 字号尺度 ========= */
+  --kal-text-2xs: 11px;
+  --kal-text-xs:  12px;
+  --kal-text-sm:  13px;
+  --kal-text-md:  14px;
+  --kal-text-base:15px;
+  --kal-text-lg:  16px;
+  --kal-text-xl:  18px;
+  --kal-text-2xl: 20px;
+  --kal-text-3xl: 24px;
+  --kal-text-4xl: 30px;
+  --kal-text-5xl: 38px;
+  --kal-text-6xl: 48px;
+
+  /* ========= 行高 ========= */
+  --kal-leading-tight: 1.2;
+  --kal-leading-snug:  1.4;
+  --kal-leading-normal:1.55;
+  --kal-leading-relaxed:1.7;
+
+  /* ========= 字重 ========= */
+  --kal-fw-regular: 400;
+  --kal-fw-medium:  500;
+  --kal-fw-semibold:600;
+  --kal-fw-bold:    700;
+
+  /* ========= 间距尺度 (基准 4px) ========= */
+  --kal-space-0: 0;
+  --kal-space-1: 4px;
+  --kal-space-2: 8px;
+  --kal-space-3: 12px;
+  --kal-space-4: 16px;
+  --kal-space-5: 20px;
+  --kal-space-6: 24px;
+  --kal-space-7: 32px;
+  --kal-space-8: 40px;
+  --kal-space-9: 48px;
+  --kal-space-10:64px;
+  --kal-space-11:80px;
+  --kal-space-12:96px;
+
+  /* ========= 圆角 ========= */
+  --kal-radius-xs: 4px;
+  --kal-radius-sm: 6px;
+  --kal-radius-md: 10px;
+  --kal-radius-lg: 14px;
+  --kal-radius-xl: 20px;
+  --kal-radius-2xl:28px;
+  --kal-radius-full:9999px;
+
+  /* ========= 阴影 ========= */
+  --kal-shadow-xs: 0 1px 2px rgba(28, 25, 23, 0.04);
+  --kal-shadow-sm: 0 1px 3px rgba(28, 25, 23, 0.06),
+                   0 1px 2px rgba(28, 25, 23, 0.04);
+  --kal-shadow-md: 0 4px 12px rgba(28, 25, 23, 0.07),
+                   0 2px 4px rgba(28, 25, 23, 0.04);
+  --kal-shadow-lg: 0 12px 28px rgba(28, 25, 23, 0.10),
+                   0 4px 8px rgba(28, 25, 23, 0.04);
+  --kal-shadow-xl: 0 24px 48px rgba(28, 25, 23, 0.14),
+                   0 8px 16px rgba(28, 25, 23, 0.06);
+  --kal-shadow-primary: 0 8px 24px -8px rgba(134, 26, 18, 0.45);
+  --kal-shadow-focus: 0 0 0 3px rgba(134, 26, 18, 0.18);
+
+  /* ========= 动效 ========= */
+  --kal-ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
+  --kal-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --kal-duration-1:  120ms;
+  --kal-duration-2:  180ms;
+  --kal-duration-3:  240ms;
+  --kal-duration-4:  320ms;
+  --kal-duration-5:  480ms;
+
+  /* ========= 布局 ========= */
+  --kal-content-max-width: 1280px;
+  --kal-content-padding-x: 32px;
+  --kal-header-height: 68px;
+  --kal-z-header: 100;
+  --kal-z-dropdown: 200;
+  --kal-z-overlay: 1000;
+  --kal-z-modal: 1100;
+  --kal-z-toast: 1200;
+}

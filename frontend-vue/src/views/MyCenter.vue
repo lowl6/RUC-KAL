@@ -1,0 +1,664 @@
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { useUserStore } from '@/stores/user'
+import { projectsApi, personalCardsApi } from '@/api/projects'
+import { normalizeProject, normalizePersonalCard, normalizeUser } from '@/api/normalize'
+import Icon from '@/components/Icon.vue'
+
+const router = useRouter()
+const auth = useAuthStore()
+const user = useUserStore()
+const tab = ref('projects')
+
+const myProjects = ref([])
+const myCard = ref(null)
+const loading = ref(false)
+const error = ref('')
+const me = computed(() => auth.me ? normalizeUser(auth.me) : null)
+const initials = computed(() => me.value?.display_name?.[0] || '我')
+const unreadMessages = computed(() => user.unreadMessages)
+
+const notifyEmail = ref(false)
+const notifySaving = ref(false)
+async function toggleNotifyEmail (v) {
+  notifySaving.value = true
+  try {
+    await auth.setNotifyEmail(v)
+    notifyEmail.value = v
+  } catch (e) {
+    notifyEmail.value = !v
+    alert(e.message || '保存失败')
+  } finally {
+    notifySaving.value = false
+  }
+}
+
+const tabs = [
+  { value: 'projects', label: '我的项目卡', icon: 'briefcase' },
+  { value: 'personal', label: '我的个人卡', icon: 'target' },
+  { value: 'settings', label: '账户设置', icon: 'settings' }
+]
+
+const statusMap = {
+  recruiting: { label: '组队中' },
+  completed:  { label: '已组齐' },
+  closed:     { label: '已结束' },
+  hidden:     { label: '已隐藏' },
+  deleted:    { label: '已删除' }
+}
+
+function acceptApplication(p, a) { a.status = 'accepted'; alert(`已同意 ${a.name} 的申请`) }
+function rejectApplication(p, a) { a.status = 'rejected'; alert(`已婉拒 ${a.name} 的申请`) }
+
+async function loadMine() {
+  loading.value = true
+  error.value = ''
+  try {
+    const [projects, card] = await Promise.all([
+      projectsApi.mine(),
+      personalCardsApi.mine()
+    ])
+    myProjects.value = (projects || []).map(normalizeProject)
+    myCard.value = card ? normalizePersonalCard(card) : null
+  } catch (e) {
+    error.value = '个人数据加载失败：' + (e.message || '请重新登录')
+    myProjects.value = []
+    myCard.value = null
+  } finally {
+    loading.value = false
+  }
+}
+
+function logout() {
+  auth.logout()
+  router.push('/login')
+}
+
+onMounted(async () => {
+  await loadMine()
+  notifyEmail.value = !!auth.me?.notifyEmail
+  user.refreshUnread()
+})
+</script>
+
+<template>
+  <div class="kal-container kmc">
+    <!-- 用户信息卡 -->
+    <header class="kmc-profile">
+      <div class="kmc-profile-left">
+        <span class="kal-avatar kal-avatar-lg">{{ initials }}</span>
+        <div>
+          <div class="kal-eyebrow kmc-profile-eyebrow">My&nbsp;Profile</div>
+          <h1 class="kmc-profile-name">{{ me?.display_name }}</h1>
+          <div class="kmc-profile-meta">
+            <span>{{ me?.dept_name }}</span>
+            <span class="kmc-profile-dot"></span>
+            <span>{{ me?.grade }}</span>
+            <span class="kmc-profile-dot"></span>
+            <span class="kmc-profile-email">{{ me?.email }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="kmc-profile-stats">
+        <div>
+          <dt>{{ myProjects.length }}</dt>
+          <dd>项目卡</dd>
+        </div>
+        <div>
+          <dt>01</dt>
+          <dd>个人卡</dd>
+        </div>
+        <div>
+          <dt>{{ unreadMessages }}</dt>
+          <dd>未读私信</dd>
+        </div>
+      </div>
+    </header>
+
+    <div v-if="error" class="kal-card kmc-notice">{{ error }}</div>
+    <div v-if="loading" class="kal-card kmc-notice">正在读取个人中心数据…</div>
+
+    <!-- Tabs -->
+    <nav class="kmc-tabs">
+      <button
+        v-for="t in tabs"
+        :key="t.value"
+        class="kmc-tab"
+        :class="{ 'kmc-tab--active': tab === t.value }"
+        @click="tab = t.value"
+      >
+        <Icon :name="t.icon" :size="14" />
+        <span>{{ t.label }}</span>
+      </button>
+    </nav>
+
+    <!-- 我的项目卡 -->
+    <section v-if="tab === 'projects'" class="kmc-section">
+      <div class="kmc-section-head">
+        <h2 class="kmc-section-title">
+          <span class="kal-serial">i.</span>
+          <span>我发布的项目卡</span>
+        </h2>
+        <button class="kal-btn" @click="router.push('/projects/new')">
+          <Icon name="plus" :size="14" :stroke="2" />
+          <span>新建项目卡</span>
+        </button>
+      </div>
+
+      <div class="kmc-cards">
+        <article
+          v-for="p in myProjects"
+          :key="p.project_id"
+          class="kal-card kmc-project"
+        >
+          <div class="kmc-project-head">
+            <h3 class="kmc-project-title">{{ p.project_name }}</h3>
+            <span class="kmc-status">
+              <span class="kmc-status-dot" :class="`kmc-status-dot--${p.status}`"></span>
+              <span>{{ statusMap[p.status]?.label || p.status }}</span>
+            </span>
+          </div>
+          <p class="kmc-project-desc">{{ p.one_liner }}</p>
+
+          <div class="kmc-project-meta">
+            <span class="kmc-meta-item">
+              <Icon name="trophy" :size="13" />
+              <span>{{ p.competition_short }}</span>
+            </span>
+            <span class="kmc-meta-item">
+              <Icon name="users" :size="13" />
+              <span>已有 {{ p.current_members }} · 招募 {{ p.needed_count }}</span>
+            </span>
+            <span class="kmc-meta-item">
+              <Icon name="eye" :size="13" />
+              <span>{{ p.view_count }}</span>
+            </span>
+            <span class="kmc-meta-item">
+              <Icon name="mail" :size="13" />
+              <span>{{ p.applications.length }}</span>
+            </span>
+          </div>
+
+          <div v-if="p.applications.length > 0" class="kmc-apps">
+            <header class="kmc-apps-head">
+              <span class="kal-eyebrow">Applications · {{ p.applications.length }}</span>
+            </header>
+            <div
+              v-for="a in p.applications"
+              :key="a.id"
+              class="kmc-app"
+            >
+              <span class="kal-avatar kal-avatar-sm">{{ a.name[0] }}</span>
+              <div class="kmc-app-body">
+                <div class="kmc-app-name">{{ a.name }}</div>
+                <div class="kmc-app-skills">{{ a.skills.join(' · ') }}</div>
+              </div>
+              <div class="kmc-app-time">{{ a.time }}</div>
+              <div class="kmc-app-actions" v-if="a.status === 'pending'">
+                <button class="kal-btn kal-btn-sm" @click="acceptApplication(p, a)">同意</button>
+                <button class="kal-btn kal-btn-sm kal-btn-ghost" @click="rejectApplication(p, a)">婉拒</button>
+              </div>
+              <span v-else class="kmc-app-result" :class="{ 'kmc-app-result--ok': a.status === 'accepted' }">
+                {{ a.status === 'accepted' ? '已同意' : '已婉拒' }}
+              </span>
+            </div>
+          </div>
+
+          <footer class="kmc-project-actions">
+            <button class="kal-btn kal-btn-sm kal-btn-ghost" @click="router.push(`/projects/${p.project_id}`)">
+              <span>查看详情</span>
+              <Icon name="arrow-right" :size="13" :stroke="1.8" />
+            </button>
+            <button v-if="p.status === 'recruiting'" class="kal-btn kal-btn-sm kal-btn-secondary">编辑</button>
+            <button v-if="p.status === 'recruiting'" class="kal-btn kal-btn-sm kal-btn-secondary">标记已组齐</button>
+          </footer>
+        </article>
+      </div>
+    </section>
+
+    <!-- 我的个人卡 -->
+    <section v-if="tab === 'personal'" class="kmc-section">
+      <div class="kmc-section-head">
+        <h2 class="kmc-section-title">
+          <span class="kal-serial">ii.</span>
+          <span>我的个人卡</span>
+        </h2>
+        <button class="kal-btn" @click="router.push('/personal-cards/edit')">
+          <Icon name="edit" :size="14" />
+          <span>编辑</span>
+        </button>
+      </div>
+
+      <article class="kal-card kmc-personal">
+        <div class="kmc-personal-head">
+          <span class="kal-avatar kal-avatar-lg">{{ myCard?.initial || '我' }}</span>
+          <div class="kmc-personal-info">
+            <div class="kmc-personal-name">{{ myCard?.display_name || '尚未发布个人卡' }}</div>
+            <div class="kmc-personal-meta">{{ myCard?.dept_name || me?.dept_name }} · {{ myCard?.grade || me?.grade }} · {{ myCard?.target_role || '未填写目标角色' }}</div>
+          </div>
+          <div class="kmc-personal-toggle">
+            <span class="kmc-personal-status">
+              <span class="kmc-status-dot kmc-status-dot--recruiting"></span>
+              <span>公开可见</span>
+            </span>
+            <label class="kmc-switch">
+              <input type="checkbox" checked />
+              <span class="kmc-switch-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <hr class="kal-rule kmc-rule" />
+
+        <p class="kmc-personal-intro">{{ myCard?.self_intro || '发布个人卡后，这里会展示你的自我介绍。' }}</p>
+
+        <div class="kmc-personal-skills">
+          <span v-for="s in (myCard?.skills || [])" :key="s" class="kmc-skill">{{ s }}</span>
+        </div>
+
+        <div class="kmc-personal-stats">
+          <div>
+            <dt>每周可投入</dt>
+            <dd>{{ myCard?.weekly_hours || 0 }} 小时</dd>
+          </div>
+          <div>
+            <dt>寒暑假</dt>
+            <dd>{{ myCard?.vacation_available ? '可投入' : '时间有限' }}</dd>
+          </div>
+          <div>
+            <dt>感兴趣比赛</dt>
+            <dd>{{ (myCard?.interested_competitions || []).join(' · ') || '未填写' }}</dd>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- 设置 -->
+    <section v-if="tab === 'settings'" class="kmc-section">
+      <article class="kal-card kmc-settings">
+        <header class="kmc-settings-head">
+          <span class="kal-eyebrow">Notifications</span>
+          <h3>通知设置</h3>
+        </header>
+        <div class="kmc-settings-row">
+          <div>
+            <div class="kmc-settings-label">收到新申请</div>
+            <div class="kmc-settings-desc">有同学申请加入你的项目时通知</div>
+          </div>
+          <label class="kmc-switch"><input type="checkbox" checked /><span class="kmc-switch-slider"></span></label>
+        </div>
+        <div class="kmc-settings-row">
+          <div>
+            <div class="kmc-settings-label">收到新私信 · 站内提醒</div>
+            <div class="kmc-settings-desc">登录后顶栏自动出现红点；进入会话即标记已读</div>
+          </div>
+          <label class="kmc-switch"><input type="checkbox" checked disabled /><span class="kmc-switch-slider"></span></label>
+        </div>
+        <div class="kmc-settings-row">
+          <div>
+            <div class="kmc-settings-label">收到新私信 · 邮件提醒</div>
+            <div class="kmc-settings-desc">开启后，每当有新私信会向你的校内邮箱发送通知</div>
+          </div>
+          <label class="kmc-switch">
+            <input type="checkbox" :checked="notifyEmail" :disabled="notifySaving" @change="toggleNotifyEmail($event.target.checked)" />
+            <span class="kmc-switch-slider"></span>
+          </label>
+        </div>
+        <div class="kmc-settings-row">
+          <div>
+            <div class="kmc-settings-label">截止日期提醒</div>
+            <div class="kmc-settings-desc">比赛 / 组队截止前 3 天提醒</div>
+          </div>
+          <label class="kmc-switch"><input type="checkbox" checked /><span class="kmc-switch-slider"></span></label>
+        </div>
+
+        <header class="kmc-settings-head kmc-mt">
+          <span class="kal-eyebrow">Privacy</span>
+          <h3>隐私设置</h3>
+        </header>
+        <div class="kmc-settings-row">
+          <div>
+            <div class="kmc-settings-label">展示院系</div>
+            <div class="kmc-settings-desc">个人卡 / 项目卡是否展示院系</div>
+          </div>
+          <label class="kmc-switch"><input type="checkbox" checked /><span class="kmc-switch-slider"></span></label>
+        </div>
+        <div class="kmc-settings-row">
+          <div>
+            <div class="kmc-settings-label">展示年级</div>
+            <div class="kmc-settings-desc">个人卡 / 项目卡是否展示年级</div>
+          </div>
+          <label class="kmc-switch"><input type="checkbox" checked /><span class="kmc-switch-slider"></span></label>
+        </div>
+
+        <header class="kmc-settings-head kmc-mt">
+          <span class="kal-eyebrow">Account</span>
+          <h3>账户</h3>
+        </header>
+        <div class="kmc-settings-row">
+          <div>
+            <div class="kmc-settings-label">微信号预填</div>
+            <div class="kmc-settings-desc">私信"发送微信"按钮使用该号码</div>
+          </div>
+          <input class="kal-input kmc-settings-input" :value="me?.wechat_id" readonly />
+        </div>
+        <div class="kmc-settings-row">
+          <div>
+            <div class="kmc-settings-label">退出登录</div>
+            <div class="kmc-settings-desc">将清除当前登录态并返回登录页</div>
+          </div>
+          <button class="kal-btn kal-btn-sm kal-btn-secondary" @click="logout">
+            <Icon name="logout" :size="13" />
+            <span>退出登录</span>
+          </button>
+        </div>
+      </article>
+    </section>
+  </div>
+</template>
+
+<style scoped>
+.kmc { max-width: 1200px; }
+
+.kmc-profile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 32px 40px;
+  margin-bottom: 28px;
+  background: var(--kal-paper);
+  border: 1px solid var(--kal-border);
+  border-radius: var(--kal-radius-md);
+}
+.kmc-profile-left { display: flex; align-items: center; gap: 20px; }
+.kmc-profile-eyebrow { color: var(--kal-text-subtle); margin-bottom: 8px; }
+.kmc-profile-name {
+  font-family: var(--kal-font-serif);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  color: var(--kal-text-strong);
+  margin-bottom: 6px;
+}
+.kmc-profile-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--kal-text-muted);
+  letter-spacing: 0.5px;
+}
+.kmc-profile-dot { width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
+.kmc-profile-email { color: var(--kal-text); }
+.kmc-profile-stats {
+  display: flex;
+  gap: 36px;
+  padding-left: 36px;
+  border-left: 1px solid var(--kal-border);
+}
+.kmc-profile-stats > div { display: flex; flex-direction: column; align-items: flex-start; }
+.kmc-profile-stats dt {
+  font-family: var(--kal-font-serif);
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--kal-text-strong);
+  letter-spacing: 0.5px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.kmc-profile-stats dd { font-size: 11px; color: var(--kal-text-subtle); margin: 0; letter-spacing: 1.5px; }
+.kmc-notice {
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: var(--kal-text-muted);
+  font-size: var(--kal-text-sm);
+}
+
+.kmc-tabs {
+  display: flex;
+  gap: 0;
+  background: var(--kal-surface);
+  border: 1px solid var(--kal-border);
+  border-radius: var(--kal-radius-sm);
+  padding: 4px;
+  margin-bottom: 24px;
+  width: fit-content;
+}
+.kmc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  background: transparent;
+  border: none;
+  font-size: var(--kal-text-md);
+  font-weight: 500;
+  color: var(--kal-text-muted);
+  border-radius: var(--kal-radius-xs);
+  cursor: pointer;
+  transition: all var(--kal-duration-2);
+  letter-spacing: 1px;
+}
+.kmc-tab:hover { color: var(--kal-text); }
+.kmc-tab--active {
+  background: var(--kal-ink);
+  color: #fff;
+}
+
+.kmc-section { display: flex; flex-direction: column; }
+.kmc-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.kmc-section-title {
+  font-family: var(--kal-font-serif);
+  font-size: var(--kal-text-2xl);
+  font-weight: 600;
+  letter-spacing: 2.5px;
+  color: var(--kal-text-strong);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.kmc-section-title .kal-serial { font-size: 0.7em; }
+
+/* ---------- Status dot ---------- */
+.kmc-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--kal-text-muted);
+}
+.kmc-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--kal-text-subtle); }
+.kmc-status-dot--recruiting { background: var(--kal-success); }
+.kmc-status-dot--completed  { background: var(--kal-sand); }
+.kmc-status-dot--closed     { background: var(--kal-gray-400); }
+
+/* ---------- Project ---------- */
+.kmc-cards { display: flex; flex-direction: column; gap: 20px; }
+.kmc-project { padding: 28px 32px; }
+.kmc-project-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
+.kmc-project-title {
+  font-family: var(--kal-font-serif);
+  font-size: var(--kal-text-xl);
+  font-weight: 600;
+  color: var(--kal-text-strong);
+  letter-spacing: 1.5px;
+}
+.kmc-project-desc { color: var(--kal-text-muted); margin-bottom: 18px; line-height: 1.7; }
+.kmc-project-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+  font-size: var(--kal-text-sm);
+  color: var(--kal-text-muted);
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--kal-divider);
+}
+.kmc-meta-item { display: inline-flex; align-items: center; gap: 6px; }
+
+.kmc-apps {
+  margin-top: 20px;
+  padding: 20px 22px;
+  background: var(--kal-bg-subtle);
+  border-radius: var(--kal-radius-sm);
+}
+.kmc-apps-head { margin-bottom: 14px; }
+.kmc-apps-head .kal-eyebrow { color: var(--kal-text-subtle); }
+.kmc-app {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--kal-divider);
+}
+.kmc-app:last-child { border-bottom: none; }
+.kmc-app-body { flex: 1; min-width: 0; }
+.kmc-app-name { font-weight: 500; font-size: var(--kal-text-sm); color: var(--kal-text); letter-spacing: 0.5px; }
+.kmc-app-skills { font-size: 11px; color: var(--kal-text-subtle); margin-top: 3px; letter-spacing: 0.5px; }
+.kmc-app-time { font-size: 11px; color: var(--kal-text-subtle); letter-spacing: 0.5px; }
+.kmc-app-actions { display: flex; gap: 6px; }
+.kmc-app-result {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: var(--kal-radius-xs);
+  background: var(--kal-bg);
+  color: var(--kal-text-subtle);
+  letter-spacing: 1px;
+}
+.kmc-app-result--ok { color: var(--kal-success); background: var(--kal-success-bg); }
+
+.kmc-project-actions { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+
+/* ---------- Personal ---------- */
+.kmc-personal { padding: 32px 36px; }
+.kmc-personal-head { display: flex; align-items: center; gap: 18px; }
+.kmc-personal-info { flex: 1; min-width: 0; }
+.kmc-personal-name {
+  font-family: var(--kal-font-serif);
+  font-size: var(--kal-text-2xl);
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--kal-text-strong);
+}
+.kmc-personal-meta { font-size: var(--kal-text-sm); color: var(--kal-text-muted); margin-top: 4px; letter-spacing: 0.5px; }
+.kmc-personal-toggle {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.kmc-personal-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--kal-text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.kmc-rule { margin: 22px 0; }
+.kmc-personal-intro {
+  color: var(--kal-text-muted);
+  line-height: 1.85;
+  margin-bottom: 20px;
+}
+.kmc-personal-skills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }
+.kmc-skill {
+  display: inline-flex;
+  padding: 3px 10px;
+  font-size: 11px;
+  background: var(--kal-bg-subtle);
+  color: var(--kal-text);
+  border-radius: var(--kal-radius-xs);
+  letter-spacing: 0.5px;
+}
+.kmc-personal-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  padding-top: 20px;
+  border-top: 1px solid var(--kal-divider);
+}
+.kmc-personal-stats > div { display: flex; flex-direction: column; gap: 6px; }
+.kmc-personal-stats dt {
+  font-size: 10px;
+  color: var(--kal-text-subtle);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.kmc-personal-stats dd {
+  font-family: var(--kal-font-serif);
+  font-size: var(--kal-text-md);
+  color: var(--kal-text-strong);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+/* ---------- Switch ---------- */
+.kmc-switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+.kmc-switch input { opacity: 0; width: 0; height: 0; }
+.kmc-switch-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: var(--kal-gray-300);
+  border-radius: 24px;
+  transition: .3s;
+}
+.kmc-switch-slider::before {
+  content: '';
+  position: absolute;
+  height: 16px; width: 16px;
+  left: 3px; bottom: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: .3s;
+  box-shadow: var(--kal-shadow-xs);
+}
+.kmc-switch input:checked + .kmc-switch-slider { background: var(--kal-ink); }
+.kmc-switch input:checked + .kmc-switch-slider::before { transform: translateX(18px); }
+
+/* ---------- Settings ---------- */
+.kmc-settings { padding: 32px 36px; }
+.kmc-settings-head { padding-bottom: 12px; margin-bottom: 8px; border-bottom: 1px solid var(--kal-divider); }
+.kmc-settings-head .kal-eyebrow { color: var(--kal-text-subtle); margin-bottom: 6px; }
+.kmc-settings-head h3 {
+  font-family: var(--kal-font-serif);
+  font-size: var(--kal-text-lg);
+  font-weight: 600;
+  color: var(--kal-text-strong);
+  letter-spacing: 2px;
+}
+.kmc-mt { margin-top: 32px; }
+.kmc-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px dashed var(--kal-divider);
+}
+.kmc-settings-row:last-child { border-bottom: none; }
+.kmc-settings-label { font-weight: 500; color: var(--kal-text); font-size: var(--kal-text-md); letter-spacing: 0.5px; }
+.kmc-settings-desc { font-size: 11px; color: var(--kal-text-subtle); margin-top: 4px; letter-spacing: 0.5px; }
+.kmc-settings-input { width: auto; max-width: 220px; padding: 6px 10px; font-size: var(--kal-text-sm); }
+
+@media (max-width: 768px) {
+  .kmc-profile { flex-direction: column; align-items: flex-start; padding: 22px; gap: 22px; }
+  .kmc-profile-stats { padding-left: 0; padding-top: 22px; border-left: none; border-top: 1px solid var(--kal-border); width: 100%; gap: 28px; }
+  .kmc-tabs { width: 100%; overflow-x: auto; }
+  .kmc-project, .kmc-personal, .kmc-settings { padding: 22px; }
+}
+</style>

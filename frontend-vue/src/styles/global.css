@@ -1,0 +1,352 @@
+/* =========================================================
+ * 知行创坊 KAL · 全局样式（reset + 通用工具类）
+ * ======================================================= */
+
+@import './tokens.css';
+
+/* ---------- Reset ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+
+body {
+  font-family: var(--kal-font-sans);
+  font-size: var(--kal-text-base);
+  line-height: var(--kal-leading-normal);
+  color: var(--kal-text);
+  background: var(--kal-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+h1, h2, h3, h4, h5, h6, p, ul, ol, dl, dd, figure { margin: 0; padding: 0; }
+ul, ol { list-style: none; }
+img, svg, video { display: block; max-width: 100%; }
+button { font-family: inherit; font-size: inherit; cursor: pointer; }
+input, textarea, select { font-family: inherit; font-size: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+
+/* ---------- 全局滚动条 ---------- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--kal-gray-300);
+  border-radius: var(--kal-radius-full);
+  border: 2px solid var(--kal-bg);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--kal-gray-400); }
+
+/* ---------- 选中颜色 ---------- */
+::selection { background: var(--kal-primary-100); color: var(--kal-primary-700); }
+
+/* ---------- 焦点环 ---------- */
+:focus-visible {
+  outline: 2px solid var(--kal-primary-600);
+  outline-offset: 2px;
+  border-radius: var(--kal-radius-sm);
+}
+
+/* ---------- 排版工具 ---------- */
+.kal-display {
+  font-family: var(--kal-font-serif);
+  font-weight: var(--kal-fw-semibold);
+  letter-spacing: -0.01em;
+}
+.kal-text-muted { color: var(--kal-text-muted); }
+.kal-text-subtle { color: var(--kal-text-subtle); }
+
+/* 眉题（页面顶部小写英文标签） */
+.kal-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--kal-text-xs);
+  font-weight: var(--kal-fw-medium);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--kal-text-subtle);
+}
+.kal-eyebrow::before {
+  content: '';
+  width: 24px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+/* 编号字 — 序数 / 步骤 / 章节 */
+.kal-serial {
+  font-family: var(--kal-font-serif);
+  font-style: italic;
+  font-weight: var(--kal-fw-regular);
+  color: var(--kal-text-subtle);
+  letter-spacing: 0.04em;
+}
+
+/* 区块标题（serif，无 emoji） */
+.kal-section-title {
+  font-family: var(--kal-font-serif);
+  font-weight: var(--kal-fw-semibold);
+  font-size: var(--kal-text-xl);
+  color: var(--kal-text-strong);
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.kal-section-title .kal-serial { font-size: 0.7em; }
+
+/* 发丝分隔线（顶天立地，比 divider 更轻） */
+.kal-rule {
+  height: 1px;
+  background: var(--kal-border);
+  border: none;
+  margin: 0;
+}
+
+/* ---------- 容器 ---------- */
+.kal-container {
+  width: 100%;
+  max-width: var(--kal-content-max-width);
+  margin: 0 auto;
+  padding-left: var(--kal-content-padding-x);
+  padding-right: var(--kal-content-padding-x);
+}
+
+/* ---------- 卡片 ---------- */
+.kal-card {
+  background: var(--kal-surface);
+  border: 1px solid var(--kal-border);
+  border-radius: var(--kal-radius-lg);
+  box-shadow: var(--kal-shadow-xs);
+}
+.kal-card-hoverable {
+  transition: all var(--kal-duration-3) var(--kal-ease-out);
+}
+.kal-card-hoverable:hover {
+  box-shadow: var(--kal-shadow-md);
+  border-color: var(--kal-primary-200);
+  transform: translateY(-2px);
+}
+
+/* ---------- 按钮 ---------- */
+.kal-btn {
+  --btn-bg: var(--kal-primary-600);
+  --btn-color: #fff;
+  --btn-border: var(--kal-primary-600);
+  --btn-hover-bg: var(--kal-primary-hover);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: var(--kal-radius-md);
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--btn-color);
+  font-size: var(--kal-text-md);
+  font-weight: var(--kal-fw-medium);
+  line-height: 1;
+  white-space: nowrap;
+  transition: all var(--kal-duration-2) var(--kal-ease-out);
+  user-select: none;
+}
+.kal-btn:hover { background: var(--btn-hover-bg); border-color: var(--btn-hover-bg); transform: translateY(-1px); }
+.kal-btn:active { transform: translateY(0); }
+.kal-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.kal-btn-lg { padding: 12px 24px; font-size: var(--kal-text-base); }
+.kal-btn-sm { padding: 6px 12px; font-size: var(--kal-text-sm); border-radius: var(--kal-radius-sm); }
+.kal-btn-block { width: 100%; }
+
+.kal-btn-secondary {
+  --btn-bg: var(--kal-surface);
+  --btn-color: var(--kal-text);
+  --btn-border: var(--kal-border);
+  --btn-hover-bg: var(--kal-gray-100);
+}
+.kal-btn-ghost {
+  --btn-bg: transparent;
+  --btn-color: var(--kal-text);
+  --btn-border: transparent;
+  --btn-hover-bg: var(--kal-gray-100);
+}
+.kal-btn-outline {
+  --btn-bg: transparent;
+  --btn-color: var(--kal-primary-600);
+  --btn-border: var(--kal-primary-600);
+  --btn-hover-bg: var(--kal-primary-50);
+}
+.kal-btn-outline:hover { color: var(--kal-primary-700); border-color: var(--kal-primary-700); }
+.kal-btn-danger {
+  --btn-bg: var(--kal-danger);
+  --btn-color: #fff;
+  --btn-border: var(--kal-danger);
+  --btn-hover-bg: #b91c1c;
+}
+
+/* ---------- 表单 ---------- */
+.kal-input, .kal-select, .kal-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--kal-border);
+  border-radius: var(--kal-radius-md);
+  background: var(--kal-surface);
+  color: var(--kal-text);
+  font-size: var(--kal-text-md);
+  line-height: 1.5;
+  transition: all var(--kal-duration-2) var(--kal-ease-out);
+}
+.kal-input:hover, .kal-select:hover, .kal-textarea:hover { border-color: var(--kal-gray-400); }
+.kal-input:focus, .kal-select:focus, .kal-textarea:focus {
+  outline: none;
+  border-color: var(--kal-primary-500);
+  box-shadow: var(--kal-shadow-focus);
+}
+.kal-textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
+.kal-input::placeholder, .kal-textarea::placeholder { color: var(--kal-gray-400); }
+
+.kal-label {
+  display: block;
+  font-size: var(--kal-text-sm);
+  font-weight: var(--kal-fw-medium);
+  color: var(--kal-text);
+  margin-bottom: 8px;
+}
+.kal-label-required::after { content: ' *'; color: var(--kal-danger); }
+.kal-hint {
+  margin-top: 6px;
+  font-size: var(--kal-text-xs);
+  color: var(--kal-text-subtle);
+}
+
+/* ---------- 标签 ---------- */
+.kal-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--kal-radius-full);
+  font-size: var(--kal-text-xs);
+  font-weight: var(--kal-fw-medium);
+  background: var(--kal-gray-100);
+  color: var(--kal-text-muted);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.kal-tag-primary { background: var(--kal-primary-50); color: var(--kal-primary-700); }
+.kal-tag-success { background: var(--kal-success-bg); color: var(--kal-success); }
+.kal-tag-warning { background: var(--kal-warning-bg); color: var(--kal-warning); }
+.kal-tag-danger  { background: var(--kal-danger-bg); color: var(--kal-danger); }
+.kal-tag-neutral { background: var(--kal-gray-100); color: var(--kal-text-muted); }
+.kal-tag-sand    { background: var(--kal-sand-soft); color: var(--kal-warning); }
+.kal-tag-ink     {
+  background: transparent;
+  border-color: var(--kal-text);
+  color: var(--kal-text);
+}
+.kal-tag-outline {
+  background: transparent;
+  border-color: var(--kal-border-strong);
+  color: var(--kal-text-muted);
+}
+/* 圆点状态指示器（极简） */
+.kal-tag-dot {
+  background: transparent;
+  border: none;
+  color: var(--kal-text-muted);
+  padding: 0;
+}
+.kal-tag-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
+
+/* ---------- 头像 ---------- */
+.kal-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--kal-radius-full);
+  background: linear-gradient(135deg, var(--kal-primary-100), var(--kal-primary-200));
+  color: var(--kal-primary-700);
+  font-weight: var(--kal-fw-semibold);
+  font-size: var(--kal-text-md);
+  flex-shrink: 0;
+  letter-spacing: 0;
+  overflow: hidden;
+}
+.kal-avatar-sm { width: 32px; height: 32px; font-size: var(--kal-text-sm); }
+.kal-avatar-lg { width: 56px; height: 56px; font-size: var(--kal-text-xl); }
+
+/* ---------- 分隔线 ---------- */
+.kal-divider {
+  height: 1px;
+  background: var(--kal-divider);
+  margin: var(--kal-space-5) 0;
+  border: none;
+}
+
+/* ---------- 空状态 ---------- */
+.kal-empty {
+  text-align: center;
+  padding: var(--kal-space-9) var(--kal-space-5);
+  color: var(--kal-text-subtle);
+}
+.kal-empty-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto var(--kal-space-3);
+  opacity: 0.4;
+}
+.kal-empty-title { font-size: var(--kal-text-lg); color: var(--kal-text-muted); margin-bottom: 4px; }
+.kal-empty-desc  { font-size: var(--kal-text-sm); color: var(--kal-text-subtle); }
+
+/* ---------- 加载骨架 ---------- */
+@keyframes kal-skeleton {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.kal-skeleton {
+  background: linear-gradient(90deg, var(--kal-gray-100) 25%, var(--kal-gray-200) 37%, var(--kal-gray-100) 63%);
+  background-size: 400% 100%;
+  border-radius: var(--kal-radius-sm);
+  animation: kal-skeleton 1.4s ease-in-out infinite;
+}
+
+/* ---------- 路由切换动画 ---------- */
+.kal-page-enter-active, .kal-page-leave-active { transition: all 240ms var(--kal-ease-out); }
+.kal-page-enter-from { opacity: 0; transform: translateY(8px); }
+.kal-page-leave-to   { opacity: 0; transform: translateY(-4px); }
+
+/* ---------- 工具类 ---------- */
+.kal-flex   { display: flex; }
+.kal-flex-col { display: flex; flex-direction: column; }
+.kal-items-center { align-items: center; }
+.kal-justify-between { justify-content: space-between; }
+.kal-gap-1 { gap: 4px; }
+.kal-gap-2 { gap: 8px; }
+.kal-gap-3 { gap: 12px; }
+.kal-gap-4 { gap: 16px; }
+.kal-mt-2 { margin-top: 8px; }
+.kal-mt-3 { margin-top: 12px; }
+.kal-mt-4 { margin-top: 16px; }
+.kal-mt-6 { margin-top: 24px; }
+.kal-text-center { text-align: center; }
+
+/* ---------- 响应式辅助 ---------- */
+@media (max-width: 768px) {
+  :root {
+    --kal-content-padding-x: 16px;
+    --kal-header-height: 60px;
+  }
+}
