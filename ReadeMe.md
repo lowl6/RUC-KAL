@@ -131,7 +131,22 @@ cd /opt/ruc-kal
 bash deploy/update.sh
 ```
 
-生产密钥保存在服务器 `/opt/ruc-kal/.env`，不要提交到 GitHub。若要开启真实邮件发送，编辑 `.env`：
+### 服务器部署（无 Docker）
+
+适用于 **拉 Docker Hub 很慢或被墙**：用 apt 安装 JDK / MySQL / Nginx，Node 使用二进制包（默认从 npmmirror 下载），**不拉容器镜像**。
+
+```bash
+cd /opt/ruc-kal
+git pull
+sed -i 's/\r$//' deploy/run-native.sh deploy/update-native.sh
+bash deploy/run-native.sh
+```
+
+- 静态站与反代：本机 **80** 端口（`http://<服务器IP>/`）
+- 后端由 systemd 服务 `kal-backend` 管理；环境变量在 `/opt/ruc-kal/.env.native`
+- 后续更新：`bash deploy/update-native.sh`
+
+生产密钥保存在服务器上，不要提交到 GitHub。若要开启真实邮件发送，编辑 `.env` 或 `.env.native`：
 
 ```bash
 KAL_MAIL_ENABLED=true

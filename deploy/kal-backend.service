@@ -1,0 +1,17 @@
+[Unit]
+Description=KAL 知行创坊 Backend (Spring Boot)
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ruc-kal/backend
+EnvironmentFile=-/opt/ruc-kal/.env.native
+Environment=SPRING_PROFILES_ACTIVE=mysql
+Environment=MYSQL_URL=jdbc:mysql://127.0.0.1:3306/kal?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+ExecStart=/usr/bin/java -jar /opt/ruc-kal/backend/target/kal-backend-app.jar
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
