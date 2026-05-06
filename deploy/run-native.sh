@@ -53,13 +53,24 @@ if [[ ! -f "${APP_DIR}/.env.native" ]]; then
 fi
 
 sed -i 's/\r$//' "${APP_DIR}/.env.native" || true
-# shellcheck disable=SC1091
-set -a
-source "${APP_DIR}/.env.native"
-set +a
 
-MYSQL_APP_PW="${MYSQL_PASSWORD:?请在 .env.native 中设置 MYSQL_PASSWORD}"
-DB_USER="${MYSQL_USER:-kal}"
+env_get () {
+  local key="$1"
+  local file="$2"
+  local line
+  line="$(grep -E "^${key}=" "$file" | tail -n 1 || true)"
+  printf '%s' "${line#*=}"
+}
+
+MYSQL_APP_PW="$(env_get MYSQL_PASSWORD "${APP_DIR}/.env.native")"
+MYSQL_ROOT_PASSWORD_VAL="$(env_get MYSQL_ROOT_PASSWORD "${APP_DIR}/.env.native")"
+DB_USER="$(env_get MYSQL_USER "${APP_DIR}/.env.native")"
+DB_USER="${DB_USER:-kal}"
+
+if [[ -z "${MYSQL_APP_PW}" ]]; then
+  echo "请在 ${APP_DIR}/.env.native 设置 MYSQL_PASSWORD。"
+  exit 1
+fi
 
 run_mysql_sql () {
   "$@" <<EOSQL
@@ -72,8 +83,8 @@ EOSQL
 
 if mysql -uroot -e "SELECT 1" &>/dev/null; then
   run_mysql_sql mysql -uroot
-elif [[ -n "${MYSQL_ROOT_PASSWORD:-}" ]] && MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" mysql -uroot -e "SELECT 1" &>/dev/null; then
-  run_mysql_sql env MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" mysql -uroot
+elif [[ -n "${MYSQL_ROOT_PASSWORD_VAL}" ]] && MYSQL_PWD="${MYSQL_ROOT_PASSWORD_VAL}" mysql -uroot -e "SELECT 1" &>/dev/null; then
+  run_mysql_sql env MYSQL_PWD="${MYSQL_ROOT_PASSWORD_VAL}" mysql -uroot
 else
   echo "无法连接本机 MySQL root。请在 ${APP_DIR}/.env.native 填写 MYSQL_ROOT_PASSWORD，或确保 root 可用 socket 登录。"
   exit 1
