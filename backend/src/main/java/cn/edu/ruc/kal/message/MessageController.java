@@ -87,6 +87,8 @@ public class MessageController {
                     Conversation c = Conversation.builder()
                             .conversationId("c_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16))
                             .userAId(a).userBId(b)
+                        .contextLabel("站内私信")
+                        .lastMessage("")
                             .createdAt(LocalDateTime.now())
                             .lastMessageAt(LocalDateTime.now())
                             .expired(false)
@@ -108,6 +110,9 @@ public class MessageController {
         conv.setLastMessage(req.getContent().length() > 100
                 ? req.getContent().substring(0, 100) : req.getContent());
         conv.setLastMessageAt(LocalDateTime.now());
+        if (conv.getContextLabel() == null || conv.getContextLabel().isBlank()) {
+            conv.setContextLabel("站内私信");
+        }
 
         // 发送方自己默认已读到当下
         if (uid.equals(conv.getUserAId())) conv.setLastReadAtA(LocalDateTime.now());
@@ -137,13 +142,14 @@ public class MessageController {
         LocalDateTime lastRead;
         if (uid.equals(c.getUserAId())) lastRead = c.getLastReadAtA();
         else                            lastRead = c.getLastReadAtB();
-        if (lastRead == null) lastRead = c.getCreatedAt() == null
-                ? LocalDateTime.of(2000, 1, 1, 0, 0) : c.getCreatedAt();
+        if (lastRead == null) lastRead = LocalDateTime.of(2000, 1, 1, 0, 0);
         return msgRepo.countByConversationIdAndSenderIdNotAndCreatedAtAfter(
                 c.getConversationId(), uid, lastRead);
     }
 
     private Map<String, Object> attachUnread(Conversation c, String uid) {
+        String otherId = uid.equals(c.getUserAId()) ? c.getUserBId() : c.getUserAId();
+        User other = otherId == null ? null : userRepo.findById(otherId).orElse(null);
         Map<String, Object> m = new HashMap<>();
         m.put("conversationId", c.getConversationId());
         m.put("userAId", c.getUserAId());
@@ -154,6 +160,15 @@ public class MessageController {
         m.put("expired", c.getExpired());
         m.put("createdAt", c.getCreatedAt());
         m.put("unread", unreadOf(c, uid));
+        if (otherId != null) {
+            Map<String, Object> counterpart = new HashMap<>();
+            counterpart.put("userId", otherId);
+            counterpart.put("name", other == null || other.getDisplayName() == null || other.getDisplayName().isBlank()
+                    ? otherId : other.getDisplayName());
+            String displayName = (String) counterpart.get("name");
+            counterpart.put("initial", displayName.isBlank() ? "同" : displayName.substring(0, 1));
+            m.put("counterpart", counterpart);
+        }
         return m;
     }
 

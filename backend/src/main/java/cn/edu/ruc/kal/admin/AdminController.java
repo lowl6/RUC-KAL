@@ -235,6 +235,15 @@ public class AdminController {
         return ApiResponse.ok();
     }
 
+    @PatchMapping("/forum/posts/{id}/essence")
+    public ApiResponse<Void> essencePost(@PathVariable("id") String id, @RequestParam("essence") boolean essence) {
+        ForumPost p = forumRepo.findById(id).orElseThrow(() -> new BizException(404, "帖子不存在"));
+        p.setEssence(essence);
+        forumRepo.save(p);
+        audit("forum_essence", "forum_post", id, essence ? "设为精华" : "取消精华");
+        return ApiResponse.ok();
+    }
+
     /* ============== 比赛管理 ============== */
 
     @GetMapping("/competitions")

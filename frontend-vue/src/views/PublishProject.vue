@@ -79,7 +79,14 @@ async function submit() {
         skills: r.skills,
       })),
     })
-    router.push(`/projects/${created.projectId}`)
+    router.push({
+      path: '/me',
+      query: {
+        tab: 'projects',
+        refresh: String(Date.now()),
+        created: created.projectId,
+      }
+    })
   } catch (e) {
     error.value = e.message || '发布失败，请确认已登录且后端已启动。'
   } finally {

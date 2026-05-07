@@ -20,6 +20,8 @@ export const adminApi = {
     api.patch(`/admin/forum/posts/${id}/status`, { status, reason }),
   pinPost: (id, pinned) =>
     api.patch(`/admin/forum/posts/${id}/pin`, null, { params: { pinned } }),
+  essencePost: (id, essence) =>
+    api.patch(`/admin/forum/posts/${id}/essence`, null, { params: { essence } }),
   listComments: (id) => api.get(`/admin/forum/posts/${id}/comments`),
   removeComment: (id) => api.delete(`/admin/forum/comments/${id}`),
 

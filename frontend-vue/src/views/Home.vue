@@ -203,7 +203,7 @@ onMounted(loadData)
 
         <article class="kh-art-quote">
           <Icon name="message" :size="14" />
-          <span>「彼此契合，再行交换微信。」</span>
+          <span>「彼此契合，交换微信。」</span>
         </article>
       </aside>
     </section>

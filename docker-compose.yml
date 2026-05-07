@@ -16,7 +16,7 @@ services:
       - --collation-server=utf8mb4_0900_ai_ci
       - --default-time-zone=+08:00
     ports:
-      - "3306:3306"
+      - "${MYSQL_HOST_PORT:-3306}:3306"
     volumes:
       - kal-mysql-data:/var/lib/mysql
     healthcheck:
@@ -34,6 +34,7 @@ services:
       mysql:
         condition: service_healthy
     environment:
+      JAVA_TOOL_OPTIONS: -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false
       SPRING_PROFILES_ACTIVE: mysql
       MYSQL_URL: jdbc:mysql://mysql:3306/kal?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       MYSQL_USER: ${MYSQL_USER:-kal}
@@ -49,7 +50,7 @@ services:
       KAL_SMTP_PASS: ${KAL_SMTP_PASS:-}
       KAL_MAIL_FROM: ${KAL_MAIL_FROM:-KAL 知行创坊 <no-reply@example.com>}
     ports:
-      - "8080:8080"
+      - "${BACKEND_HOST_PORT:-8080}:8080"
 
   frontend:
     build:

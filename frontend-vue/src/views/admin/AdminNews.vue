@@ -50,6 +50,7 @@ onMounted(load)
 
 function open (n) {
   Object.assign(editing, blank())
+  showEdit.value = true
   if (!n) return
   Object.assign(editing, {
     newsId: n.newsId,
@@ -64,7 +65,6 @@ function open (n) {
     sortOrder: n.sortOrder ?? 0,
     publishAt: (n.publishAt || new Date().toISOString()).slice(0, 16)
   })
-  showEdit.value = true
 }
 function close () { showEdit.value = false }
 

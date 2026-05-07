@@ -37,6 +37,10 @@ async function pin (p, pinned) {
   await adminApi.pinPost(p.postId, pinned)
   await load()
 }
+async function essence (p, value) {
+  await adminApi.essencePost(p.postId, value)
+  await load()
+}
 
 const showComments = ref(false)
 const activePost = ref(null)
@@ -106,6 +110,7 @@ function statusLabel (s) { return ({ published: '已发布', hidden: '已隐藏'
             <td class="ad-ops">
               <button class="ad-link-btn" @click="viewComments(p)">评论</button>
               <button class="ad-link-btn" @click="pin(p, !p.pinned)">{{ p.pinned ? '取消置顶' : '置顶' }}</button>
+              <button class="ad-link-btn" @click="essence(p, !p.essence)">{{ p.essence ? '取消精华' : '设为精华' }}</button>
               <button v-if="p.status !== 'hidden'" class="ad-link-btn" @click="setStatus(p, 'hidden')">隐藏</button>
               <button v-else class="ad-link-btn" @click="setStatus(p, 'published')">恢复</button>
               <button v-if="p.status !== 'deleted'" class="ad-link-btn ad-link-danger" @click="setStatus(p, 'deleted')">删除</button>

@@ -136,8 +136,13 @@ const router = createRouter({
   }
 })
 
+const publicRouteNames = new Set(['Login', 'AdminLogin'])
+
 router.beforeEach((to, _from, next) => {
   const auth = useAuthStore()
+  if (!auth.isLoggedIn && !publicRouteNames.has(to.name)) {
+    return next({ path: '/login', query: { redirect: to.fullPath } })
+  }
   if (to.meta?.requireAdmin) {
     if (!auth.isLoggedIn) return next({ path: '/admin/login', query: { redirect: to.fullPath } })
     if (!auth.isAdmin)    return next({ path: '/admin/login', query: { redirect: to.fullPath } })

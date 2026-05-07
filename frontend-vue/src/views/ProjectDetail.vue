@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { projectsApi, messagesApi } from '@/api/projects'
+import { projectsApi, messagesApi, reportsApi } from '@/api/projects'
 import { normalizeProject } from '@/api/normalize'
 import { useAuthStore } from '@/stores/auth'
 import Icon from '@/components/Icon.vue'
@@ -57,6 +57,26 @@ async function apply() {
   }
 }
 function back() { router.back() }
+
+async function reportProject() {
+  if (!auth.isLoggedIn) {
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  if (!project.value.project_id) return
+  const reason = prompt('请填写举报原因（例如：虚假招募、联系方式不当、违规内容）')
+  if (reason == null) return
+  if (!reason.trim()) {
+    alert('请填写举报原因')
+    return
+  }
+  try {
+    await reportsApi.create({ targetType: 'project', targetId: project.value.project_id, reason: reason.trim() })
+    alert('已提交举报，管理员会尽快处理。')
+  } catch (e) {
+    alert(e.message || '举报失败，请稍后重试。')
+  }
+}
 
 watch(() => route.params.id, loadProject)
 onMounted(loadProject)
@@ -216,6 +236,10 @@ onMounted(loadProject)
         <button class="kal-btn kal-btn-lg kal-btn-block kpd-apply" @click="apply">
           <Icon name="message" :size="14" />
           <span>申请加入 / 私信负责人</span>
+        </button>
+        <button class="kal-btn kal-btn-block kal-btn-secondary" @click="reportProject">
+          <Icon name="alert" :size="14" />
+          <span>举报项目卡</span>
         </button>
         <p class="kpd-tip">沟通后再交换微信，平台守护双方边界。</p>
       </aside>

@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onActivated, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 import { projectsApi, personalCardsApi } from '@/api/projects'
@@ -8,9 +8,10 @@ import { normalizeProject, normalizePersonalCard, normalizeUser } from '@/api/no
 import Icon from '@/components/Icon.vue'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const user = useUserStore()
-const tab = ref('projects')
+const tab = ref(route.query.tab === 'personal' || route.query.tab === 'settings' ? route.query.tab : 'projects')
 
 const myProjects = ref([])
 const myCard = ref(null)
@@ -76,11 +77,26 @@ function logout() {
   router.push('/login')
 }
 
-onMounted(async () => {
+async function refreshMine() {
   await loadMine()
   notifyEmail.value = !!auth.me?.notifyEmail
   user.refreshUnread()
+}
+
+watch(() => route.query.tab, (value) => {
+  if (value === 'projects' || value === 'personal' || value === 'settings') {
+    tab.value = value
+  }
 })
+
+watch(() => route.query.refresh, async () => {
+  if (route.path === '/me') {
+    await refreshMine()
+  }
+})
+
+onMounted(refreshMine)
+onActivated(refreshMine)
 </script>
 
 <template>

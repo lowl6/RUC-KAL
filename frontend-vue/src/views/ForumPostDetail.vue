@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { forumApi } from '@/api/projects'
+import { forumApi, reportsApi } from '@/api/projects'
 import { normalizeForumPost, normalizeComment } from '@/api/normalize'
 import { useAuthStore } from '@/stores/auth'
 import Icon from '@/components/Icon.vue'
@@ -73,6 +73,26 @@ async function submitComment () {
   }
 }
 
+async function reportPost () {
+  if (!auth.isLoggedIn) {
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  if (!post.value?.post_id) return
+  const reason = prompt('请填写举报原因（例如：人身攻击、广告灌水、违规内容）')
+  if (reason == null) return
+  if (!reason.trim()) {
+    alert('请填写举报原因')
+    return
+  }
+  try {
+    await reportsApi.create({ targetType: 'forum_post', targetId: post.value.post_id, reason: reason.trim() })
+    alert('已提交举报，管理员会尽快处理。')
+  } catch (e) {
+    alert(e.message || '举报失败，请稍后重试。')
+  }
+}
+
 function back () { router.back() }
 
 watch(() => route.params.id, load)
@@ -121,6 +141,10 @@ onMounted(load)
           <Icon name="heart" :size="14" />
           <span>{{ liked ? '已点赞' : '点赞' }}</span>
           <strong>{{ post.like_count || 0 }}</strong>
+        </button>
+        <button class="kfd-action" @click="reportPost">
+          <Icon name="alert" :size="14" />
+          <span>举报</span>
         </button>
         <div class="kfd-action kfd-action--info">
           <Icon name="message" :size="14" />

@@ -42,3 +42,7 @@ export const messagesApi = {
   unreadCount: () => api.get('/messages/unread-count'),
   markRead: (id) => api.post(`/messages/conversations/${id}/read`),
 }
+
+export const reportsApi = {
+  create: (payload) => api.post('/reports', payload),
+}

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { messagesApi } from '@/api/projects'
 import { normalizeConversation, normalizeMessage } from '@/api/normalize'
@@ -20,6 +20,7 @@ const messages = ref([])
 const loading = ref(false)
 const error = ref('')
 const sending = ref(false)
+let pollTimer = null
 
 const filteredConv = computed(() => {
   if (!search.value) return conversations.value
@@ -71,6 +72,23 @@ async function loadConversations() {
     activeId.value = ''
   } finally {
     loading.value = false
+  }
+}
+
+async function pollConversations() {
+  if (!auth.isLoggedIn || loading.value || sending.value) return
+  const currentId = activeId.value
+  try {
+    const raw = await messagesApi.conversations()
+    conversations.value = (raw || []).map(c => normalizeConversation(c, auth.me?.userId))
+    if (!currentId && conversations.value.length) {
+      activeId.value = conversations.value[0].conversation_id
+    }
+    if (activeId.value) {
+      await loadHistory(activeId.value)
+    }
+  } catch (e) {
+    // 保持当前页面可用，不把轮询失败当成致命错误。
   }
 }
 
@@ -127,7 +145,17 @@ watch(() => route.query.conversation, (id) => {
   }
 })
 
-onMounted(loadConversations)
+onMounted(async () => {
+  await loadConversations()
+  pollTimer = setInterval(pollConversations, 10000)
+})
+
+onBeforeUnmount(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+})
 </script>
 
 <template>
@@ -197,7 +225,7 @@ onMounted(loadConversations)
         <div class="km-msgs">
           <div class="km-system">
             <span class="km-rule"></span>
-            <span>对话开始 · 平台不会保存交换微信后的私聊</span>
+            <span>对话开始</span>
             <span class="km-rule"></span>
           </div>
           <div

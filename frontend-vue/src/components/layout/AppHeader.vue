@@ -8,12 +8,17 @@ const route = useRoute()
 const router = useRouter()
 const user = useUserStore()
 
-const navMenus = [
+const publicNavMenus = [
   { to: '/', label: '首页' },
   { to: '/competitions', label: '比赛中心' },
-  { to: '/forum', label: '创坊论坛' },
-  { to: '/me', label: '个人中心' }
+  { to: '/forum', label: '创坊论坛' }
 ]
+
+const navMenus = computed(() => (
+  user.isLoggedIn
+    ? [...publicNavMenus, { to: '/me', label: '个人中心' }]
+    : publicNavMenus
+))
 
 const dropdownOpen = ref(false)
 const userMenuOpen = ref(false)
@@ -73,82 +78,88 @@ const totalUnread = computed(() => user.unreadMessages + user.unreadApplications
 
       <!-- 右侧操作区 -->
       <div class="kh-actions">
-        <!-- 发布按钮 -->
-        <div class="kh-publish">
-          <button class="kal-btn kal-btn-sm kh-publish-btn" @click="togglePublish">
-            <Icon name="plus" :size="14" :stroke="2" />
-            <span>发布</span>
-          </button>
-          <Transition name="kh-pop">
-            <div v-if="dropdownOpen" class="kh-dropdown">
-              <button class="kh-dropdown-item" @click="publishProject">
-                <span class="kh-dropdown-icon">
-                  <Icon name="briefcase" :size="18" />
-                </span>
-                <span class="kh-dropdown-text">
-                  <strong>发布项目卡</strong>
-                  <small>组建队伍，写下招募意向</small>
-                </span>
-              </button>
-              <button class="kh-dropdown-item" @click="publishProfile">
-                <span class="kh-dropdown-icon">
-                  <Icon name="target" :size="18" />
-                </span>
-                <span class="kh-dropdown-text">
-                  <strong>发布个人卡</strong>
-                  <small>陈列你的专长与节奏</small>
-                </span>
-              </button>
-              <button class="kh-dropdown-item" @click="publishPost">
-                <span class="kh-dropdown-icon">
-                  <Icon name="message" :size="18" />
-                </span>
-                <span class="kh-dropdown-text">
-                  <strong>论坛发帖</strong>
-                  <small>分享见解，提出疑问</small>
-                </span>
-              </button>
-            </div>
-          </Transition>
-        </div>
-
-        <!-- 消息 -->
-        <RouterLink to="/messages" class="kh-icon-btn" aria-label="私信">
-          <Icon name="message" :size="18" />
-          <span v-if="totalUnread" class="kh-badge">{{ totalUnread > 9 ? '9+' : totalUnread }}</span>
-        </RouterLink>
-
-        <!-- 用户头像 -->
-        <div class="kh-user">
-          <button class="kh-avatar-btn" @click="toggleUserMenu" aria-label="用户菜单">
-            <span class="kal-avatar kal-avatar-sm">{{ user.initials }}</span>
-          </button>
-          <Transition name="kh-pop">
-            <div v-if="userMenuOpen" class="kh-dropdown kh-dropdown--user">
-              <div class="kh-user-info">
-                <div class="kal-avatar">{{ user.initials }}</div>
-                <div>
-                  <div class="kh-user-name">{{ user.me?.display_name }}</div>
-                  <div class="kh-user-dept">{{ user.me?.dept_name }} · {{ user.me?.grade }}</div>
-                </div>
+        <template v-if="user.isLoggedIn">
+          <!-- 发布按钮 -->
+          <div class="kh-publish">
+            <button class="kal-btn kal-btn-sm kh-publish-btn" @click="togglePublish">
+              <Icon name="plus" :size="14" :stroke="2" />
+              <span>发布</span>
+            </button>
+            <Transition name="kh-pop">
+              <div v-if="dropdownOpen" class="kh-dropdown">
+                <button class="kh-dropdown-item" @click="publishProject">
+                  <span class="kh-dropdown-icon">
+                    <Icon name="briefcase" :size="18" />
+                  </span>
+                  <span class="kh-dropdown-text">
+                    <strong>发布项目卡</strong>
+                    <small>组建队伍，写下招募意向</small>
+                  </span>
+                </button>
+                <button class="kh-dropdown-item" @click="publishProfile">
+                  <span class="kh-dropdown-icon">
+                    <Icon name="target" :size="18" />
+                  </span>
+                  <span class="kh-dropdown-text">
+                    <strong>发布个人卡</strong>
+                    <small>陈列你的专长与节奏</small>
+                  </span>
+                </button>
+                <button class="kh-dropdown-item" @click="publishPost">
+                  <span class="kh-dropdown-icon">
+                    <Icon name="message" :size="18" />
+                  </span>
+                  <span class="kh-dropdown-text">
+                    <strong>论坛发帖</strong>
+                    <small>分享见解，提出疑问</small>
+                  </span>
+                </button>
               </div>
-              <div class="kh-divider"></div>
-              <RouterLink to="/me" class="kh-dropdown-item kh-dropdown-item--simple" @click="userMenuOpen = false">
-                <Icon name="user" :size="15" />
-                <span>个人中心</span>
-              </RouterLink>
-              <RouterLink to="/personal-cards/edit" class="kh-dropdown-item kh-dropdown-item--simple" @click="userMenuOpen = false">
-                <Icon name="target" :size="15" />
-                <span>我的个人卡</span>
-              </RouterLink>
-              <div class="kh-divider"></div>
-              <button class="kh-dropdown-item kh-dropdown-item--simple kh-logout" @click="goLogout">
-                <Icon name="logout" :size="15" />
-                <span>退出登录</span>
-              </button>
-            </div>
-          </Transition>
-        </div>
+            </Transition>
+          </div>
+
+          <!-- 消息 -->
+          <RouterLink to="/messages" class="kh-icon-btn" aria-label="私信">
+            <Icon name="message" :size="18" />
+            <span v-if="totalUnread" class="kh-badge">{{ totalUnread > 9 ? '9+' : totalUnread }}</span>
+          </RouterLink>
+
+          <!-- 用户头像 -->
+          <div class="kh-user">
+            <button class="kh-avatar-btn" @click="toggleUserMenu" aria-label="用户菜单">
+              <span class="kal-avatar kal-avatar-sm">{{ user.initials }}</span>
+            </button>
+            <Transition name="kh-pop">
+              <div v-if="userMenuOpen" class="kh-dropdown kh-dropdown--user">
+                <div class="kh-user-info">
+                  <div class="kal-avatar">{{ user.initials }}</div>
+                  <div>
+                    <div class="kh-user-name">{{ user.me?.display_name }}</div>
+                    <div class="kh-user-dept">{{ user.me?.dept_name }} · {{ user.me?.grade }}</div>
+                  </div>
+                </div>
+                <div class="kh-divider"></div>
+                <RouterLink to="/me" class="kh-dropdown-item kh-dropdown-item--simple" @click="userMenuOpen = false">
+                  <Icon name="user" :size="15" />
+                  <span>个人中心</span>
+                </RouterLink>
+                <RouterLink to="/personal-cards/edit" class="kh-dropdown-item kh-dropdown-item--simple" @click="userMenuOpen = false">
+                  <Icon name="target" :size="15" />
+                  <span>我的个人卡</span>
+                </RouterLink>
+                <div class="kh-divider"></div>
+                <button class="kh-dropdown-item kh-dropdown-item--simple kh-logout" @click="goLogout">
+                  <Icon name="logout" :size="15" />
+                  <span>退出登录</span>
+                </button>
+              </div>
+            </Transition>
+          </div>
+        </template>
+
+        <RouterLink v-else to="/login" class="kal-btn kal-btn-sm kh-login-btn">
+          登录
+        </RouterLink>
 
         <!-- 移动端菜单 -->
         <button class="kh-icon-btn kh-mobile-toggle" @click="mobileOpen = !mobileOpen" aria-label="菜单">
@@ -316,6 +327,11 @@ const totalUnread = computed(() => user.unreadMessages + user.unreadApplications
   padding-right: 16px;
 }
 .kh-publish-btn:hover { background: var(--kal-ink-soft); border-color: var(--kal-ink-soft); }
+.kh-login-btn {
+  padding-left: 16px;
+  padding-right: 16px;
+  font-weight: var(--kal-fw-medium);
+}
 
 /* Dropdown */
 .kh-dropdown {

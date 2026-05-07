@@ -1,12 +1,14 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { newsApi, competitionsApi } from '@/api/projects'
+import { newsApi, competitionsApi, reportsApi } from '@/api/projects'
 import { normalizeNews, normalizeCompetition } from '@/api/normalize'
+import { useAuthStore } from '@/stores/auth'
 import Icon from '@/components/Icon.vue'
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 
 const news = ref(null)
 const competition = ref(null)
@@ -38,6 +40,26 @@ function goCompetition () {
   if (competition.value) router.push({ name: 'competition-detail', params: { id: competition.value.competition_id } })
 }
 function back () { router.back() }
+
+async function reportNews () {
+  if (!auth.isLoggedIn) {
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  if (!news.value?.news_id) return
+  const reason = prompt('请填写举报原因（例如：失效链接、错误信息、违规内容）')
+  if (reason == null) return
+  if (!reason.trim()) {
+    alert('请填写举报原因')
+    return
+  }
+  try {
+    await reportsApi.create({ targetType: 'news', targetId: news.value.news_id, reason: reason.trim() })
+    alert('已提交举报，管理员会尽快处理。')
+  } catch (e) {
+    alert(e.message || '举报失败，请稍后重试。')
+  }
+}
 
 watch(() => route.params.id, load)
 onMounted(load)
@@ -84,6 +106,10 @@ onMounted(load)
           <Icon name="external-link" :size="13" />
           <span>阅读官方原文</span>
         </a>
+        <button class="kal-btn kal-btn-secondary" @click="reportNews">
+          <Icon name="alert" :size="13" />
+          <span>举报资讯</span>
+        </button>
       </footer>
     </article>
   </div>

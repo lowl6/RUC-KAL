@@ -146,6 +146,28 @@ bash deploy/run-native.sh
 - 后端由 systemd 服务 `kal-backend` 管理；环境变量在 `/opt/ruc-kal/.env.native`
 - 后续更新：`bash deploy/update-native.sh`
 
+### 校园网 / 无 sudo 用户态部署
+
+适用于 **校园网 Linux 主机 / 实验室机器 / 个人账号没有 root 权限** 的场景。该脚本会：
+
+- 在 `$HOME/apps` 安装 JDK / Maven / Node；
+- 后端仅监听 `127.0.0.1:${BACKEND_PORT:-18080}`；
+- 前端监听 `0.0.0.0:${FRONTEND_PORT:-18000}`，并在同一端口下把 `/api/*` 反代到本机后端；
+- 首次运行自动生成 `.env.user-space`，其中 `PUBLIC_WEB_BASE_URL` 需要改成校园服务器实际 IP 或域名。
+
+```bash
+cd ~/ruc-kal
+sed -i 's/\r$//' deploy/user-space-deploy.sh
+bash deploy/user-space-deploy.sh
+```
+
+完成后访问：
+
+- 前台：`http://<校园服务器IP>:18000/`
+- 管理后台：`http://<校园服务器IP>:18000/admin/login`
+
+若首次生成的是本机回环地址，请编辑 `~/ruc-kal/.env.user-space` 中的 `PUBLIC_WEB_BASE_URL` 后重新运行脚本。对外通常只需要放行 `FRONTEND_PORT`，无需暴露后端端口。
+
 生产密钥保存在服务器上，不要提交到 GitHub。若要开启真实邮件发送，编辑 `.env` 或 `.env.native`：
 
 ```bash
@@ -154,6 +176,48 @@ KAL_SMTP_USER=<SMTP邮箱账号>
 KAL_SMTP_PASS=<SMTP客户端授权码>
 KAL_MAIL_FROM=KAL 知行创坊 <SMTP邮箱账号>
 ```
+
+### 当前线上服务器快速更新（39.106.213.32）
+
+当前线上环境已经改为：
+
+- Nginx 直接托管前端静态文件到 `/usr/share/nginx/html/kal`
+- `/api/*` 反代到本机 Spring Boot `127.0.0.1:8080`
+- 代码仓库位于服务器 `/root/ruc-kal`
+
+本地 Windows 直接执行：
+
+```powershell
+cd c:\PROGRAMING\KAL\src
+.\update-server.ps1
+```
+
+脚本会在服务器端自动执行以下动作：
+
+- `git pull --ff-only`
+- 构建 `frontend-vue`
+- 发布静态文件到 Nginx 目录并重载 Nginx
+- 构建 `backend`
+- 使用服务器上的 `.runtime.env` 或 `.env` 重启后端 jar
+
+常用参数：
+
+```powershell
+# 只更新前端 + Nginx
+.\update-server.ps1 -FrontendOnly
+
+# 代码已在服务器改好时，跳过 git pull
+.\update-server.ps1 -SkipPull
+
+# 只查看将发送到服务器的脚本内容
+.\update-server.ps1 -DryRun
+```
+
+前提：
+
+- 服务器已安装 `git`、`npm`、`mvn`、`java`、`nginx`
+- 服务器仓库目录为 `/root/ruc-kal`
+- 后端运行所需配置保存在 `/root/ruc-kal/.env` 或 `/root/ruc-kal/.runtime.env`
 
 ### 本机 MySQL 运行
 
