@@ -367,6 +367,12 @@ if ($DryRun) {
   return
 }
 
+Write-Info "检查 SSH 免密登录：$User@$Server ..."
+ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$User@$Server" "echo SSH_OK" | Out-Host
+if ($LASTEXITCODE -ne 0) {
+  throw "无法免密 SSH 到 $User@$Server。请先配置 SSH key，或在能登录服务器的终端手动执行部署命令；脚本已避免继续挂住。"
+}
+
 Write-Info "ssh $User@$Server -> 拉取最新代码、重新构建并重启..."
 $remoteScript | ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$User@$Server" "bash -s"
 if ($LASTEXITCODE -ne 0) {

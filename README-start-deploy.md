@@ -40,6 +40,16 @@ cd c:\PROGRAMING\KAL\src
 
 ## 2. 服务器更新部署（多人协作）
 
+### 前提：本机必须能免密 SSH 到服务器
+
+先确认：
+
+```powershell
+ssh -o BatchMode=yes root@39.106.213.32 "echo SSH_OK"
+```
+
+如果提示 `Permission denied`，先配置 SSH key；否则 `deploy.ps1` 会快速失败，避免像普通 `ssh` 一样卡在密码提示上。
+
 ### 标准方式（推荐）
 
 ```powershell

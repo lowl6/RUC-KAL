@@ -64,6 +64,7 @@ public class MailService {
     }
 
     /** 验证码邮件 */
+    @Async
     public void sendCode(String to, String code) {
         String subject = "【知行创坊】您的邮箱验证码";
         String body = String.format("""
