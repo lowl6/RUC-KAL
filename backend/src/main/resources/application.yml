@@ -37,6 +37,7 @@ spring:
   # ---------- 真实 SMTP（默认走 163 邮箱发送验证码 / 私信通知） ----------
   # 上线请通过环境变量覆盖：KAL_SMTP_USER / KAL_SMTP_PASS（密码即「客户端授权码」，非网页登录密码）。
   mail:
+    protocol: ${KAL_SMTP_PROTOCOL:smtps}
     host:     ${KAL_SMTP_HOST:smtp.163.com}
     port:     ${KAL_SMTP_PORT:465}
     username: ${KAL_SMTP_USER:}
@@ -49,7 +50,6 @@ spring:
           auth: true
           ssl:
             enable: ${KAL_SMTP_SSL:true}
-            protocols: TLSv1.2
             trust: "*"
             checkserveridentity: false
           starttls:
@@ -57,7 +57,16 @@ spring:
           connectiontimeout: 15000
           timeout: 15000
           writetimeout: 15000
-          localhost: 127.0.0.1
+          quitwait: false
+        smtps:
+          auth: true
+          connectiontimeout: 15000
+          timeout: 15000
+          writetimeout: 15000
+          quitwait: false
+          ssl:
+            trust: "*"
+            checkserveridentity: false
           # 排查 SMTP 时取消下行注释，控制台可看到完整握手与协议交互
           # debug: true
 

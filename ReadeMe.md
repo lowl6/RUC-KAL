@@ -16,6 +16,31 @@
 
 ---
 
+### 一键操作（Windows · PowerShell）
+
+整个项目只需要两个脚本：`local-dev.ps1`（本地）+ `deploy.ps1`（部署）。
+
+```powershell
+# === 脚本 1：本地一键启动 / 停止 / 重启 / 状态 ===
+# 端口被占会交互式询问：杀进程 / 换端口 / 放弃；自动注入本地 CORS。
+powershell -ExecutionPolicy Bypass -File local-dev.ps1                  # 启动（默认）
+powershell -ExecutionPolicy Bypass -File local-dev.ps1 -Action Restart  # 重启（重新构建）
+powershell -ExecutionPolicy Bypass -File local-dev.ps1 -Action Stop     # 停止
+powershell -ExecutionPolicy Bypass -File local-dev.ps1 -Action Status   # 状态
+powershell -ExecutionPolicy Bypass -File local-dev.ps1 -Force           # 占端口直接 kill 不询问
+
+# === 脚本 2：本地 → GitHub → 服务器同步 → 重启（多人协作友好） ===
+# 自动 commit/push，然后 ssh 到 39.106.213.32 走 git reset --hard origin/master，
+# 重建前端 + 后端，并按需把 SMTP 授权码下发到服务器 .runtime.env。
+powershell -ExecutionPolicy Bypass -File deploy.ps1 -Message "你的提交信息"
+powershell -ExecutionPolicy Bypass -File deploy.ps1 -NoCommit            # 仅同步服务器
+powershell -ExecutionPolicy Bypass -File deploy.ps1 -FrontendOnly        # 只更新前端
+powershell -ExecutionPolicy Bypass -File deploy.ps1 -BackendOnly         # 只重启后端
+powershell -ExecutionPolicy Bypass -File deploy.ps1 -SmtpUser ruc_kal@163.com -SmtpPass <163客户端授权码>
+```
+
+> 注：`deploy.ps1` 不传 `-SmtpUser/-SmtpPass` 时会**自动**从本地 `.env` 读 `KAL_SMTP_USER` / `KAL_SMTP_PASS` 下发到服务器，所以改完本地 `.env` 直接 `deploy.ps1 -NoCommit` 就能把新授权码同步过去。
+
 ## 项目目录
 
 ```
@@ -104,6 +129,32 @@ npm run dev
 
 > 前端通过 `VITE_API_BASE` 环境变量可改后端地址，默认 `http://localhost:8080/api/v1`。
 
+### 3. Windows 本地一键启停
+
+用 `local-dev.ps1` 一个脚本就够（默认 Action = Start）：
+
+```powershell
+cd c:\PROGRAMING\KAL\src
+
+.\local-dev.ps1                       # 启动（默认）
+.\local-dev.ps1 -Action Restart       # 重新构建并重启
+.\local-dev.ps1 -Action Stop          # 停止
+.\local-dev.ps1 -Action Status        # 查看状态
+
+# 可选参数
+.\local-dev.ps1 -SkipBuild            # 跳过 mvn package
+.\local-dev.ps1 -Force                # 端口被占自动 kill 不再交互询问
+.\local-dev.ps1 -BackendPort 18080 -FrontendPort 15173
+```
+
+脚本做的事：
+
+- 启动前检测 8080 / 5173 是否被占，被占则询问 `[k] 杀进程 / [n] 换端口 / [a] 放弃`；
+- 自动把本地 CORS（含 5173/5174/3000 等）注入到后端，避免根目录 `.env` 的服务器 CORS 把本地验证码拦掉；
+- 没有 boot jar 时自动回退到 `mvn spring-boot:run`；
+- 日志写到 `.local-run/backend.log` / `frontend.log`；
+- 等 `http://localhost:8080/api/v1/public/news` 和 `http://localhost:5173/login` 双双就绪才返回成功。
+
 ---
 
 ## MySQL 与 Docker Compose
@@ -185,39 +236,44 @@ KAL_MAIL_FROM=KAL 知行创坊 <SMTP邮箱账号>
 - `/api/*` 反代到本机 Spring Boot `127.0.0.1:8080`
 - 代码仓库位于服务器 `/root/ruc-kal`
 
-本地 Windows 直接执行：
+推荐：本地 Windows 直接执行 `deploy.ps1`（一键 commit + push + 服务器同步 + 重启）：
 
 ```powershell
 cd c:\PROGRAMING\KAL\src
-.\update-server.ps1
+
+# 一键：commit + push to GitHub + 服务器从 GitHub 拉取并重启
+.\deploy.ps1 -Message "fix: ..."
+
+# 已经手动 push 过，只让服务器同步
+.\deploy.ps1 -NoCommit
+
+# 不真的执行，只看会下发到服务器的 bash 脚本
+.\deploy.ps1 -DryRun
 ```
 
-脚本会在服务器端自动执行以下动作：
+`deploy.ps1` 在服务器端默认执行：
 
-- `git pull --ff-only`
-- 构建 `frontend-vue`
-- 发布静态文件到 Nginx 目录并重载 Nginx
-- 构建 `backend`
-- 使用服务器上的 `.runtime.env` 或 `.env` 重启后端 jar
+- `git fetch && git reset --hard origin/master`（多人协作模式：服务器永远 = GitHub，丢弃服务器本地改动）；担心覆盖加 `-SoftPull` 改回 `git pull --ff-only`；
+- 把本地 `.env` 里的 `KAL_SMTP_USER` / `KAL_SMTP_PASS` 写进服务器 `/root/ruc-kal/.runtime.env`，并把 `KAL_SMTP_PORT / SSL / STARTTLS` 锁到 `465 / true / false`（修复阿里云大陆机出网 587/25 被拦超时的问题）；不需要时加 `-NoSmtpFix`；
+- 构建 `frontend-vue` → 发布到 Nginx 目录 → 重载 Nginx；
+- 构建 `backend` → kill 旧 jar → 加载 env → `nohup java -jar` 重启；
+- 末尾打印 `ROOT / LOGIN / API_NEWS / API_CAPTCHA` 状态码 + `GIT_HEAD` 短哈希做 smoke 测。
 
 常用参数：
 
 ```powershell
-# 只更新前端 + Nginx
-.\update-server.ps1 -FrontendOnly
-
-# 代码已在服务器改好时，跳过 git pull
-.\update-server.ps1 -SkipPull
-
-# 只查看将发送到服务器的脚本内容
-.\update-server.ps1 -DryRun
+.\deploy.ps1 -FrontendOnly    # 只更新前端 + Nginx
+.\deploy.ps1 -BackendOnly     # 只重启后端
+.\deploy.ps1 -NoSmtpFix       # 保留服务器现有邮件配置不动
+.\deploy.ps1 -SkipPull        # 跳过服务器 git fetch/reset（仅本机已 push）
+.\deploy.ps1 -SmtpUser ruc_kal@163.com -SmtpPass <新授权码>   # 显式下发凭据
 ```
 
 前提：
 
-- 服务器已安装 `git`、`npm`、`mvn`、`java`、`nginx`
-- 服务器仓库目录为 `/root/ruc-kal`
-- 后端运行所需配置保存在 `/root/ruc-kal/.env` 或 `/root/ruc-kal/.runtime.env`
+- 本地装好 `git`、`ssh`，可以 `ssh root@39.106.213.32` 免密登录；
+- 服务器装好 `git`、`npm`、`mvn`、`java`、`nginx`；
+- 服务器仓库目录为 `/root/ruc-kal`，后端运行所需配置在 `/root/ruc-kal/.runtime.env` 或 `/root/ruc-kal/.env`。
 
 ### 本机 MySQL 运行
 
