@@ -160,6 +160,8 @@ SMTP_FIX=__SMTP_FIX__
 BRANCH='__BRANCH__'
 SMTP_USER_NEW='__SMTP_USER__'
 SMTP_PASS_NEW='__SMTP_PASS__'
+BUNDLE_ENABLED=__BUNDLE_ENABLED__
+BUNDLE_PATH='__BUNDLE_PATH__'
 cd '__REMOTE_PATH__'
 
 require_cmd() {
@@ -218,9 +220,45 @@ load_env_file() {
 require_cmd git 3
 require_cmd curl 5
 
+retry_git_fetch() {
+  local fetch_cmd="$1"
+  local attempts=4
+  local delay=3
+  local i
+  for i in $(seq 1 $attempts); do
+    echo ">>> git fetch attempt $i/$attempts: $fetch_cmd"
+    # 某些云主机到 GitHub 会偶发 HTTP2 连接抖动，强制 HTTP/1.1 更稳
+    if env GIT_HTTP_VERSION=HTTP/1.1 bash -lc "$fetch_cmd"; then
+      return 0
+    fi
+    if [ "$i" -lt "$attempts" ]; then
+      sleep "$delay"
+      delay=$((delay * 2))
+    fi
+  done
+  return 1
+}
+
 # ---------- 与 GitHub 强一致 ----------
 if [ "$SKIP_PULL" != "1" ]; then
-  git fetch --all --prune
+  fetch_ok=1
+  if ! retry_git_fetch "git fetch --all --prune"; then
+    echo "WARN: git fetch --all failed, retry with shallow fetch..." >&2
+    if ! retry_git_fetch "git fetch --prune --depth=1 origin $BRANCH"; then
+      fetch_ok=0
+    fi
+  fi
+  if [ "$fetch_ok" = "0" ]; then
+    if [ "$BUNDLE_ENABLED" = "1" ] && [ -f "$BUNDLE_PATH" ]; then
+      echo "WARN: GitHub unreachable, falling back to git bundle: $BUNDLE_PATH" >&2
+      git checkout "$BRANCH" || git checkout -B "$BRANCH"
+      git fetch "$BUNDLE_PATH" "$BRANCH"
+      git reset --hard FETCH_HEAD
+    else
+      echo "ERROR: git fetch failed and bundle fallback unavailable." >&2
+      exit 128
+    fi
+  fi
   if [ "$SOFT_PULL" = "1" ]; then
     echo ">>> git pull --ff-only origin/$BRANCH"
     git checkout "$BRANCH"
@@ -228,7 +266,10 @@ if [ "$SKIP_PULL" != "1" ]; then
   else
     echo ">>> git reset --hard origin/$BRANCH (确保和 GitHub 一字不差，丢弃服务器本地改动)"
     git checkout "$BRANCH"
-    git fetch origin "$BRANCH"
+    if ! retry_git_fetch "git fetch origin $BRANCH"; then
+      echo "WARN: full fetch failed, retry with shallow fetch..." >&2
+      retry_git_fetch "git fetch --depth=1 origin $BRANCH"
+    fi
     git reset --hard "origin/$BRANCH"
     git clean -fdx -- frontend-vue/dist frontend-vue/dist-ssr || true
   fi
@@ -360,6 +401,8 @@ $remoteScript = $remoteScript.Replace('__BRANCH__',        $Branch)
 $remoteScript = $remoteScript.Replace('__SMTP_USER__',     ([string]$SmtpUser))
 $remoteScript = $remoteScript.Replace('__SMTP_PASS__',     ([string]$SmtpPass))
 $remoteScript = $remoteScript.Replace('__REMOTE_PATH__',   $RemotePath)
+$remoteScript = $remoteScript.Replace('__BUNDLE_ENABLED__', '0')
+$remoteScript = $remoteScript.Replace('__BUNDLE_PATH__', '')
 $remoteScript = $remoteScript.Replace("`r`n", "`n")
 
 if ($DryRun) {
@@ -372,6 +415,24 @@ ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$
 if ($LASTEXITCODE -ne 0) {
   throw "无法免密 SSH 到 $User@$Server。请先配置 SSH key，或在能登录服务器的终端手动执行部署命令；脚本已避免继续挂住。"
 }
+
+$runtimeDir = Join-Path $Root '.local-run'
+if (-not (Test-Path -LiteralPath $runtimeDir)) {
+  New-Item -ItemType Directory -Path $runtimeDir | Out-Null
+}
+$bundleFile = Join-Path $runtimeDir "deploy-$Branch.bundle"
+Write-Info "生成本地 git bundle 备用包..."
+git bundle create "$bundleFile" "$Branch" | Out-Host
+if ($LASTEXITCODE -ne 0) {
+  throw "生成 git bundle 失败（$bundleFile）"
+}
+Write-Info "上传 bundle 到服务器 /tmp/kal-deploy.bundle ..."
+scp -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new "$bundleFile" "${User}@${Server}:/tmp/kal-deploy.bundle" | Out-Host
+if ($LASTEXITCODE -ne 0) {
+  throw "上传 git bundle 失败（scp exit code = $LASTEXITCODE）"
+}
+$remoteScript = $remoteScript.Replace('__BUNDLE_ENABLED__', '1')
+$remoteScript = $remoteScript.Replace('__BUNDLE_PATH__', '/tmp/kal-deploy.bundle')
 
 Write-Info "ssh $User@$Server -> 拉取最新代码、重新构建并重启..."
 $remoteScript | ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$User@$Server" "bash -s"
