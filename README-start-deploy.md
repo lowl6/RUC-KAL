@@ -97,21 +97,30 @@ cd c:\PROGRAMING\KAL\src
 
 ### `release version 21 not supported`（Maven 编译失败）
 
-后端需要 **JDK 21**。`deploy.ps1` 会在构建前尝试自动安装：
+后端需要 **JDK 21**，且 **`java` 与 `javac` 都必须是 21**（仅 JRE 不行）。`deploy.ps1` 会：
 
-- RHEL/CentOS/Alibaba：`dnf` / `yum install java-21-openjdk-devel`
-- Debian/Ubuntu：`apt-get install openjdk-21-jdk`
+1. 扫描 `/usr/lib/jvm`、优先使用 `/opt/java-21-temurin`；
+2. 尝试 `dnf` / `yum` / `apt` 安装 `java-21-openjdk-devel` 或 `openjdk-21-jdk`；
+3. 仍失败则从 Adoptium 下载压缩包（直连失败会再试 `mirror.ghproxy.com` 前缀）解压到 `/opt/java-21-temurin`。
 
-若仓库里没有 21 包，请 SSH 登录后手动安装并指定 `JAVA_HOME`，例如：
+构建阶段会执行 `env JAVA_HOME=... mvn ...`，避免系统默认仍指向 JDK8。
+
+**注意**：若服务器 `.env` 里写了错误的 `JAVA_HOME`（例如 JDK8），脚本会在启动 jar 前恢复为本次检测到的 JDK21，避免运行时误用旧 Java。
+
+若全自动仍失败，请 SSH 手动安装后重试 `deploy.ps1`：
 
 ```bash
 ls /usr/lib/jvm
 export JAVA_HOME=/usr/lib/jvm/java-21-openjdk   # 以实际目录为准
 export PATH="$JAVA_HOME/bin:$PATH"
-java -version   # 应显示 21.x
+java -version && javac -version   # 均需 21.x
 ```
 
-然后再运行 `.\deploy.ps1 -NoCommit`。
+或设置自定义包地址后重跑部署（在**服务器**上 `export` 后需要把逻辑写进脚本，更简单是手动解压到 `/opt/java-21-temurin`）：
+
+```bash
+export KAL_BOOTSTRAP_JDK_URL='https://.../OpenJDK21U-jdk_x64_linux_hotspot....tar.gz'
+```
 
 ### `vite: Permission denied`
 

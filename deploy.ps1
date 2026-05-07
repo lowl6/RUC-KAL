@@ -221,13 +221,27 @@ require_cmd git 3
 require_cmd curl 5
 
 # Spring Boot 3 / 本项目 pom 要求 JDK 21；云主机常自带 Java 8，会导致 maven-compiler-plugin: release 21 not supported
-java_major_version() {
-  if ! command -v java >/dev/null 2>&1; then
+java_major_from_bin() {
+  local bin="${1:-java}"
+  local line v
+  if ! command -v "$bin" >/dev/null 2>&1 && [ ! -x "$bin" ]; then
     echo 0
     return
   fi
-  local v
-  v=$(java -version 2>&1 | awk -F '"' '/version/ { print $2; exit }')
+  line=$("$bin" -version 2>&1 | head -1)
+  # java: OpenJDK Runtime Environment ..., openjdk version "21.0.9"
+  # javac: javac 21.0.9
+  if echo "$line" | grep -q 'version "'; then
+    v=$(echo "$line" | sed -n 's/.*version "\([^"]*\)".*/\1/p')
+  elif echo "$line" | grep -qE '^javac '; then
+    v=$(echo "$line" | awk '{print $2}')
+  else
+    v=$(echo "$line" | grep -oE '[0-9]{1,2}\.[0-9]+(\.[0-9]+)?' | head -1 || true)
+  fi
+  if [ -z "$v" ]; then
+    echo 0
+    return
+  fi
   case "$v" in
     1.8*|1.7*|1.6*) echo 8 ;;
     1.*) echo 8 ;;
@@ -235,55 +249,176 @@ java_major_version() {
   esac
 }
 
+java_major_version() { java_major_from_bin java; }
+
+javac_major_version() {
+  if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/javac" ]; then
+    java_major_from_bin "$JAVA_HOME/bin/javac"
+    return
+  fi
+  java_major_from_bin javac
+}
+
+# 扫描 /usr/lib/jvm 下任意满足 major>=21 的 JDK（兼容 Alibaba / 各种命名）
+discover_java21_home() {
+  local d mj
+  if [ -d /usr/lib/jvm ]; then
+    for d in /usr/lib/jvm/*; do
+      [ -d "$d" ] || continue
+      [ -x "$d/bin/java" ] || continue
+      mj=$(java_major_from_bin "$d/bin/java")
+      if [[ "$mj" =~ ^[0-9]+$ ]] && [ "$mj" -ge 21 ] && [ -x "$d/bin/javac" ]; then
+        echo "$d"
+        return 0
+      fi
+    done
+  fi
+  return 1
+}
+
 apply_java21_home() {
-  local d
+  local d h mj
   for d in \
+    /opt/java-21-temurin \
     /usr/lib/jvm/java-21-openjdk \
     /usr/lib/jvm/java-21-openjdk-amd64 \
     /usr/lib/jvm/java-21 \
     /usr/lib/jvm/java-21-amazon-corretto \
     /usr/lib/jvm/temurin-21-jdk-amd64; do
-    if [ -x "$d/bin/java" ]; then
-      export JAVA_HOME="$d"
-      export PATH="$JAVA_HOME/bin:$PATH"
-      return 0
+    if [ -x "$d/bin/java" ] && [ -x "$d/bin/javac" ]; then
+      mj=$(java_major_from_bin "$d/bin/java")
+      if [[ "$mj" =~ ^[0-9]+$ ]] && [ "$mj" -ge 21 ]; then
+        export JAVA_HOME="$d"
+        export PATH="$JAVA_HOME/bin:$PATH"
+        return 0
+      fi
     fi
   done
+  h=$(discover_java21_home || true)
+  if [ -n "$h" ]; then
+    export JAVA_HOME="$h"
+    export PATH="$JAVA_HOME/bin:$PATH"
+    return 0
+  fi
   return 1
+}
+
+# 镜像源里没有 java-21 时：从 Adoptium 拉二进制（需能访问 github.com）
+install_java21_temurin_tarball() {
+  local url ver url2
+  local dest=/opt/java-21-temurin
+  local tmp=/tmp/OpenJDK21U-jdk_x64_linux_hotspot.tar.gz
+  ver="jdk-21.0.9%2B12"
+  url="https://github.com/adoptium/temurin21-binaries/releases/download/${ver}/OpenJDK21U-jdk_x64_linux_hotspot_21.0.9_12.tar.gz"
+  # 备选：绕过直连失败时可改镜像（用户可自行 export KAL_BOOTSTRAP_JDK_URL=...）
+  url2="${KAL_BOOTSTRAP_JDK_URL:-}"
+
+  echo ">>> bootstrap JDK 21 (Temurin) under $dest ..."
+  rm -rf "$dest"
+  mkdir -p /opt
+  set +e
+  download_jdk() {
+    rm -f "$tmp"
+    curl -fL --retry 2 --connect-timeout 30 --max-time 900 -o "$tmp" "$1" && return 0
+    wget -q --timeout=60 -O "$tmp" "$1" && return 0
+    return 1
+  }
+  rc=1
+  if [ -n "$url2" ]; then
+    download_jdk "$url2" && rc=0
+  else
+    download_jdk "$url" && rc=0
+    if [ "$rc" != 0 ]; then
+      echo ">>> retry JDK tarball via mirror.ghproxy.com ..." >&2
+      download_jdk "https://mirror.ghproxy.com/${url}" && rc=0
+    fi
+  fi
+  set -e
+  if [ "$rc" != 0 ] || [ ! -s "$tmp" ]; then
+    echo "WARN: JDK 21 tarball download failed (rc=$rc)." >&2
+    return 1
+  fi
+  rm -rf /tmp/jdk-unpack-j21
+  mkdir -p /tmp/jdk-unpack-j21
+  tar -xzf "$tmp" -C /tmp/jdk-unpack-j21
+  local sub
+  sub=$(find /tmp/jdk-unpack-j21 -type f -path '*/bin/java' ! -path '*/jre/*' 2>/dev/null | head -1 | sed 's|/bin/java||')
+  if [ -z "$sub" ] || [ ! -x "$sub/bin/java" ]; then
+    echo "WARN: unpacked JDK layout unexpected." >&2
+    return 1
+  fi
+  mv "$sub" "$dest"
+  rm -rf /tmp/jdk-unpack-j21 "$tmp" || true
+  chmod -R a+rX "$dest"
+  export JAVA_HOME="$dest"
+  export PATH="$JAVA_HOME/bin:$PATH"
+  return 0
+}
+
+verify_jdk21_for_maven() {
+  local mj ja
+  mj=$(java_major_version)
+  ja=$(javac_major_version)
+  echo ">>> java major=$mj | javac major=$ja | JAVA_HOME=${JAVA_HOME:-}"
+  if ! [[ "$mj" =~ ^[0-9]+$ ]] || [ "$mj" -lt 21 ]; then
+    return 1
+  fi
+  if ! [[ "$ja" =~ ^[0-9]+$ ]] || [ "$ja" -lt 21 ]; then
+    return 1
+  fi
+  return 0
 }
 
 ensure_java21_for_build() {
   apply_java21_home || true
-  local mj
-  mj=$(java_major_version)
-  if [[ "$mj" =~ ^[0-9]+$ ]] && [ "$mj" -ge 21 ]; then
-    echo ">>> JDK OK (major=$mj): $(java -version 2>&1 | head -1)"
+  if verify_jdk21_for_maven; then
+    echo ">>> JDK OK for Maven: $(java -version 2>&1 | head -1)"
+    mvn -version | head -3 || true
     return 0
   fi
 
-  echo ">>> installing JDK 21 (current java major=${mj:-none})..."
+  echo ">>> installing JDK 21 via package manager (java/javac not both >=21 yet) ..."
+  set +e
   if command -v dnf >/dev/null 2>&1; then
-    dnf install -y java-21-openjdk-devel || true
+    dnf install -y java-21-openjdk-devel 2>&1 | tail -5
+    apply_java21_home || true
   fi
   if command -v yum >/dev/null 2>&1; then
-    yum install -y java-21-openjdk-devel || true
+    yum install -y java-21-openjdk-devel 2>&1 | tail -5
+    apply_java21_home || true
   fi
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq && apt-get install -y openjdk-21-jdk || true
+    apt-get update -qq && apt-get install -y openjdk-21-jdk 2>&1 | tail -8
+    apply_java21_home || true
   fi
+  set -e
 
   apply_java21_home || true
-  mj=$(java_major_version)
-  if ! [[ "$mj" =~ ^[0-9]+$ ]] || [ "$mj" -lt 21 ]; then
-    echo "ERROR: 需要 JDK 21 才能编译后端（当前 major=${mj:-unknown}）。" >&2
-    echo "请 SSH 登录服务器后手动安装其一：" >&2
-    echo "  Alibaba/CentOS/RHEL: dnf install -y java-21-openjdk-devel   # 或 yum install ..." >&2
-    echo "  Ubuntu/Debian:     apt-get update && apt-get install -y openjdk-21-jdk" >&2
-    echo "然后执行: export JAVA_HOME=/usr/lib/jvm/java-21-openjdk   # 路径以 ls /usr/lib/jvm 为准" >&2
-    exit 11
+  if verify_jdk21_for_maven; then
+    echo ">>> JDK OK after package install"
+    mvn -version | head -3 || true
+    return 0
   fi
-  echo ">>> JDK OK after install (major=$mj): $(java -version 2>&1 | head -1)"
+
+  echo ">>> package install insufficient; trying Temurin tarball ..."
+  install_java21_temurin_tarball || true
+  apply_java21_home || true
+
+  if verify_jdk21_for_maven; then
+    echo ">>> JDK OK after Temurin bootstrap"
+    mvn -version | head -3 || true
+    return 0
+  fi
+
+  echo "ERROR: 需要可用的 JDK 21（java+javac 均 >=21）才能编译后端。" >&2
+  java -version 2>&1 | head -2 >&2 || true
+  javac -version 2>&1 | head -1 >&2 || true
+  echo "已尝试 dnf/yum/apt 与 Adoptium 二进制。若下载失败，请 SSH 后设置：" >&2
+  echo "  export KAL_BOOTSTRAP_JDK_URL='https://.../OpenJDK21U-jdk_x64_linux_hotspot_....tar.gz'" >&2
+  echo "  再手动解压到 /opt/java-21-temurin 并 export JAVA_HOME=该目录" >&2
+  ls -la /usr/lib/jvm 2>/dev/null | head -20 >&2 || true
+  exit 11
 }
 
 retry_git_fetch() {
@@ -430,7 +565,12 @@ if [ "$FRONTEND_ONLY" != "1" ]; then
   ensure_java21_for_build
 
   cd backend
-  mvn -DskipTests package
+  # 强制 Maven 使用该 JAVA_HOME（避免系统默认仍指向 JDK8）
+  if [ -z "${JAVA_HOME:-}" ] || [ ! -x "$JAVA_HOME/bin/java" ]; then
+    echo "ERROR: JAVA_HOME 未就绪" >&2
+    exit 11
+  fi
+  env JAVA_HOME="$JAVA_HOME" PATH="$JAVA_HOME/bin:$PATH" mvn -DskipTests package
   cd ..
 
   pkill -f 'kal-backend-app.jar' || true
@@ -439,7 +579,10 @@ if [ "$FRONTEND_ONLY" != "1" ]; then
     sleep 1
   done
 
+  _KAL_RUNTIME_JAVA_HOME="$JAVA_HOME"
   load_env_file "$ENV_FILE"
+  export JAVA_HOME="$_KAL_RUNTIME_JAVA_HOME"
+  export PATH="$JAVA_HOME/bin:$PATH"
   nohup java -jar backend/target/kal-backend-app.jar >/root/kal-backend.log 2>&1 &
   for i in $(seq 1 30); do
     sleep 1
