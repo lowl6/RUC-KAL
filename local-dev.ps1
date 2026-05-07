@@ -123,6 +123,21 @@ function Set-LocalDevDefaults($FrontPort) {
     [Environment]::SetEnvironmentVariable('KAL_WEB_BASE_URL', "http://localhost:$FrontPort", 'Process')
 }
 
+function Set-FrontendDevEnv($ApiPort) {
+    $envFile = Join-Path (Get-FrontendDir) '.env.development'
+    $content = "VITE_API_BASE=http://localhost:$ApiPort/api/v1`r`n"
+    $current = if (Test-Path -LiteralPath $envFile) {
+        Get-Content -LiteralPath $envFile -Raw -Encoding UTF8
+    } else {
+        ''
+    }
+
+    if ($current -ne $content) {
+        Set-Content -LiteralPath $envFile -Value $content -Encoding UTF8 -NoNewline
+        Write-Info "Updated frontend-vue/.env.development -> http://localhost:$ApiPort/api/v1"
+    }
+}
+
 function Apply-BackendRuntimeEnv() {
     Set-LocalDevDefaults -FrontPort $script:FrontendPort
 
@@ -597,6 +612,7 @@ function Invoke-StartStack($State) {
     # 端口冲突先交互式决策：避免后端先用旧端口启动后才发现前端端口要改，导致 CORS 还得重启一次。
     $script:BackendPort = Resolve-PortAvailable -Port $script:BackendPort -Name 'backend'
     $script:FrontendPort = Resolve-PortAvailable -Port $script:FrontendPort -Name 'frontend'
+    Set-FrontendDevEnv -ApiPort $script:BackendPort
 
     Start-Backend -State $State
     Save-State $State

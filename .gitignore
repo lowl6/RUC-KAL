@@ -10,6 +10,7 @@ Thumbs.db
 backend-run*.log
 backend-*-smoke.log
 tok.txt
+.local-run/
 
 # Secrets / local environment
 .env

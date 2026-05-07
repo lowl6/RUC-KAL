@@ -271,7 +271,15 @@ if [ "$BACKEND_ONLY" != "1" ]; then
     npm install
     touch node_modules/.kal-install-stamp
   fi
-  npm run build
+  # 有些服务器上 node_modules/.bin/vite 会丢执行权限，先兜底修复。
+  if [ -f node_modules/.bin/vite ] && [ ! -x node_modules/.bin/vite ]; then
+    chmod +x node_modules/.bin/vite || true
+  fi
+  # 先走 package.json 脚本；若遇到 Permission denied，再退回 node 直调 vite.js。
+  if ! npm run build; then
+    echo "WARN: npm run build failed, retrying via node node_modules/vite/bin/vite.js build" >&2
+    node node_modules/vite/bin/vite.js build
+  fi
 
   install -d /usr/share/nginx/html/kal
   rm -rf /usr/share/nginx/html/kal/*
@@ -361,4 +369,7 @@ if ($DryRun) {
 
 Write-Info "ssh $User@$Server -> 拉取最新代码、重新构建并重启..."
 $remoteScript | ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$User@$Server" "bash -s"
+if ($LASTEXITCODE -ne 0) {
+  throw "远端部署失败（ssh exit code = $LASTEXITCODE）。请查看上方日志定位错误。"
+}
 Write-Ok '部署完成。'
