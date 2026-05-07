@@ -220,6 +220,72 @@ load_env_file() {
 require_cmd git 3
 require_cmd curl 5
 
+# Spring Boot 3 / 本项目 pom 要求 JDK 21；云主机常自带 Java 8，会导致 maven-compiler-plugin: release 21 not supported
+java_major_version() {
+  if ! command -v java >/dev/null 2>&1; then
+    echo 0
+    return
+  fi
+  local v
+  v=$(java -version 2>&1 | awk -F '"' '/version/ { print $2; exit }')
+  case "$v" in
+    1.8*|1.7*|1.6*) echo 8 ;;
+    1.*) echo 8 ;;
+    *) echo "${v%%.*}" ;;
+  esac
+}
+
+apply_java21_home() {
+  local d
+  for d in \
+    /usr/lib/jvm/java-21-openjdk \
+    /usr/lib/jvm/java-21-openjdk-amd64 \
+    /usr/lib/jvm/java-21 \
+    /usr/lib/jvm/java-21-amazon-corretto \
+    /usr/lib/jvm/temurin-21-jdk-amd64; do
+    if [ -x "$d/bin/java" ]; then
+      export JAVA_HOME="$d"
+      export PATH="$JAVA_HOME/bin:$PATH"
+      return 0
+    fi
+  done
+  return 1
+}
+
+ensure_java21_for_build() {
+  apply_java21_home || true
+  local mj
+  mj=$(java_major_version)
+  if [[ "$mj" =~ ^[0-9]+$ ]] && [ "$mj" -ge 21 ]; then
+    echo ">>> JDK OK (major=$mj): $(java -version 2>&1 | head -1)"
+    return 0
+  fi
+
+  echo ">>> installing JDK 21 (current java major=${mj:-none})..."
+  if command -v dnf >/dev/null 2>&1; then
+    dnf install -y java-21-openjdk-devel || true
+  fi
+  if command -v yum >/dev/null 2>&1; then
+    yum install -y java-21-openjdk-devel || true
+  fi
+  if command -v apt-get >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq && apt-get install -y openjdk-21-jdk || true
+  fi
+
+  apply_java21_home || true
+  mj=$(java_major_version)
+  if ! [[ "$mj" =~ ^[0-9]+$ ]] || [ "$mj" -lt 21 ]; then
+    echo "ERROR: 需要 JDK 21 才能编译后端（当前 major=${mj:-unknown}）。" >&2
+    echo "请 SSH 登录服务器后手动安装其一：" >&2
+    echo "  Alibaba/CentOS/RHEL: dnf install -y java-21-openjdk-devel   # 或 yum install ..." >&2
+    echo "  Ubuntu/Debian:     apt-get update && apt-get install -y openjdk-21-jdk" >&2
+    echo "然后执行: export JAVA_HOME=/usr/lib/jvm/java-21-openjdk   # 路径以 ls /usr/lib/jvm 为准" >&2
+    exit 11
+  fi
+  echo ">>> JDK OK after install (major=$mj): $(java -version 2>&1 | head -1)"
+}
+
 retry_git_fetch() {
   local fetch_cmd="$1"
   local attempts=4
@@ -361,6 +427,7 @@ fi
 if [ "$FRONTEND_ONLY" != "1" ]; then
   require_cmd mvn 7
   require_cmd java 8
+  ensure_java21_for_build
 
   cd backend
   mvn -DskipTests package

@@ -95,6 +95,24 @@ cd c:\PROGRAMING\KAL\src
 
 ## 4. 故障排查
 
+### `release version 21 not supported`（Maven 编译失败）
+
+后端需要 **JDK 21**。`deploy.ps1` 会在构建前尝试自动安装：
+
+- RHEL/CentOS/Alibaba：`dnf` / `yum install java-21-openjdk-devel`
+- Debian/Ubuntu：`apt-get install openjdk-21-jdk`
+
+若仓库里没有 21 包，请 SSH 登录后手动安装并指定 `JAVA_HOME`，例如：
+
+```bash
+ls /usr/lib/jvm
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk   # 以实际目录为准
+export PATH="$JAVA_HOME/bin:$PATH"
+java -version   # 应显示 21.x
+```
+
+然后再运行 `.\deploy.ps1 -NoCommit`。
+
 ### `vite: Permission denied`
 
 `deploy.ps1` 已内置修复：自动 `chmod +x node_modules/.bin/vite`，若仍失败会 fallback 到：
