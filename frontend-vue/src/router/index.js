@@ -75,6 +75,18 @@ const routes = [
     component: () => import('@/views/MyCenter.vue'),
     meta: { title: '我的中心', requireAuth: true }
   },
+  {
+    path: '/workspaces/new',
+    name: 'WorkspaceCreate',
+    component: () => import('@/views/WorkspaceCreate.vue'),
+    meta: { title: '新建项目', requireAuth: true }
+  },
+  {
+    path: '/workspaces/:id',
+    name: 'WorkspaceDetail',
+    component: () => import('@/views/WorkspaceDetail.vue'),
+    meta: { title: '项目详情', requireAuth: true }
+  },
 
   /* ========== 通用静态页 ========== */
   {
@@ -100,6 +112,17 @@ const routes = [
     name: 'Contact',
     component: () => import('@/views/static/Contact.vue'),
     meta: { title: '联系我们' }
+  },
+
+  /* ========== 工作人员（staff） ========== */
+  {
+    path: '/staff',
+    component: () => import('@/views/staff/StaffLayout.vue'),
+    meta: { requireStaff: true },
+    children: [
+      { path: '',        redirect: '/staff/tickets' },
+      { path: 'tickets', name: 'StaffTickets', component: () => import('@/views/staff/StaffTickets.vue'), meta: { title: '工单工作台' } },
+    ]
   },
 
   /* ========== 管理员端 ========== */
@@ -145,8 +168,15 @@ router.beforeEach((to, _from, next) => {
   }
   if (to.meta?.requireAdmin) {
     if (!auth.isLoggedIn) return next({ path: '/admin/login', query: { redirect: to.fullPath } })
+    // 工作人员误进 /admin/** 时，引导他们去自己的工作台
+    if (auth.isStaff)     return next('/staff/tickets')
     if (!auth.isAdmin)    return next({ path: '/admin/login', query: { redirect: to.fullPath } })
     if (to.meta?.requireSuperAdmin && !auth.isSuperAdmin) return next('/admin/dashboard')
+    return next()
+  }
+  if (to.meta?.requireStaff) {
+    if (!auth.isLoggedIn)    return next({ path: '/admin/login', query: { redirect: to.fullPath } })
+    if (!auth.isStaffLevel)  return next({ path: '/admin/login', query: { redirect: to.fullPath } })
     return next()
   }
   if (to.meta?.requireAuth && !auth.isLoggedIn) {

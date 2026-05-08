@@ -69,12 +69,25 @@ public class AuthService {
         if (!email.endsWith("@ruc.edu.cn")) {
             throw new BizException("自助注册仅支持 @ruc.edu.cn 校内邮箱");
         }
+        // 角色派生：仅"本科 / 研究生 / 教师"三类可自助注册；
+        // 「工作人员」「校外」必须由管理员后台手动创建（业务规则）。
+        // 注意：把这一校验放在「消耗邮箱验证码」之前，避免合法用户因输入校验码而误烧验证码。
+        String degree = req.degreeType() == null ? "" : req.degreeType().trim();
+        boolean isTeacher = "教师".equals(degree);
+        boolean isStudent = "本科".equals(degree) || "研究生".equals(degree) || degree.isEmpty();
+        if (!isTeacher && !isStudent) {
+            throw new BizException("「" + degree + "」身份不支持自助注册，请联系管理员邀请开通账号。");
+        }
         if (!verifier.verifyEmailCode(email, req.emailCode())) {
             throw new BizException("邮箱验证码错误或已过期，请重新获取");
         }
         if (userRepo.existsByEmail(email)) {
             throw new BizException("该邮箱已注册");
         }
+        User.Role role = isTeacher ? User.Role.teacher : User.Role.student;
+        // 教师无需"入学年份"，统一存为"教师"标签
+        String grade = isTeacher ? "教师" : (req.grade() == null || req.grade().isBlank() ? null : req.grade());
+
         User u = User.builder()
                 .userId("u_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16))
                 .email(email)
@@ -82,8 +95,8 @@ public class AuthService {
                 .name(req.name())
                 .displayName(req.name())
                 .deptName(req.deptName())
-                .grade(req.grade())
-                .role(User.Role.student)
+                .grade(grade)
+                .role(role)
                 .status(User.Status.active)
                 .notifyEmail(false)
                 .createdAt(LocalDateTime.now())
@@ -130,7 +143,9 @@ public class AuthService {
         User u = userRepo.findByEmail(req.email().toLowerCase().trim())
                 .orElseThrow(() -> new BizException(401, "账号或密码错误"));
         verifyPassword(u, req.password());
-        if (u.getRole() != User.Role.admin && u.getRole() != User.Role.super_admin) {
+        if (u.getRole() != User.Role.admin
+                && u.getRole() != User.Role.super_admin
+                && u.getRole() != User.Role.staff) {
             throw new BizException(403, "该账号无管理后台权限");
         }
         auditRepo.save(AuditLog.builder()
@@ -138,7 +153,7 @@ public class AuthService {
                 .actorName(u.getDisplayName())
                 .action("admin_login")
                 .createdAt(LocalDateTime.now())
-                .detail("管理员登录")
+                .detail(u.getRole() == User.Role.staff ? "工作人员登录" : "管理员登录")
                 .build());
         return issueToken(u);
     }

@@ -28,7 +28,9 @@ async function submit () {
       captchaId: captcha.value.id,
       captchaCode: captcha.value.code,
     })
-    const redirect = route.query.redirect || '/admin/competitions'
+    // 工作人员（staff）→ 工单工作台；管理员/超管 → 管理后台
+    const fallback = auth.isStaff ? '/staff/tickets' : '/admin/competitions'
+    const redirect = route.query.redirect || fallback
     router.replace(redirect)
   } catch (e) {
     error.value = e.message || '登录失败'

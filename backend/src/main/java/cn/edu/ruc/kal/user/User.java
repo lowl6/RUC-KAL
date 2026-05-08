@@ -72,6 +72,6 @@ public class User {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    public enum Role { student, teacher, admin, super_admin }
+    public enum Role { student, teacher, staff, admin, super_admin }
     public enum Status { active, disabled, banned, pending_first_login }
 }

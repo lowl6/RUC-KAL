@@ -421,6 +421,140 @@ ensure_java21_for_build() {
   exit 11
 }
 
+semver_ge() {
+  # return 0 when $1 >= $2
+  local a b IFS=.
+  read -r -a a <<< "${1:-0.0.0}"
+  read -r -a b <<< "${2:-0.0.0}"
+  local i av bv
+  for i in 0 1 2; do
+    av="${a[$i]:-0}"
+    bv="${b[$i]:-0}"
+    if ((10#$av > 10#$bv)); then return 0; fi
+    if ((10#$av < 10#$bv)); then return 1; fi
+  done
+  return 0
+}
+
+maven_version() {
+  if ! command -v mvn >/dev/null 2>&1; then
+    echo "0.0.0"
+    return
+  fi
+  local v
+  v=$(mvn -version 2>/dev/null | awk '/Apache Maven/ {print $3; exit}')
+  echo "${v:-0.0.0}"
+}
+
+discover_maven_home() {
+  local d
+  for d in /opt/apache-maven-3.9.9 /opt/apache-maven-3.9.8 /opt/apache-maven-3.9.6; do
+    if [ -x "$d/bin/mvn" ]; then
+      echo "$d"
+      return 0
+    fi
+  done
+  return 1
+}
+
+apply_maven_home() {
+  local h
+  h=$(discover_maven_home || true)
+  if [ -n "$h" ]; then
+    export MAVEN_HOME="$h"
+    export PATH="$MAVEN_HOME/bin:$PATH"
+    return 0
+  fi
+  return 1
+}
+
+install_maven_tarball() {
+  local v=3.9.9
+  local name="apache-maven-${v}-bin.tar.gz"
+  local url="https://archive.apache.org/dist/maven/maven-3/${v}/binaries/${name}"
+  local tmp="/tmp/${name}"
+  local dest="/opt/apache-maven-${v}"
+
+  echo ">>> bootstrap Maven ${v} under ${dest} ..."
+  rm -rf "$dest"
+  mkdir -p /opt
+
+  set +e
+  curl -fL --retry 3 --connect-timeout 20 --max-time 900 -o "$tmp" "$url"
+  local rc=$?
+  if [ "$rc" != 0 ] || [ ! -s "$tmp" ]; then
+    echo ">>> retry Maven tarball via mirror.ghproxy.com ..." >&2
+    curl -fL --retry 2 --connect-timeout 20 --max-time 900 -o "$tmp" "https://mirror.ghproxy.com/${url}"
+    rc=$?
+  fi
+  set -e
+
+  if [ "$rc" != 0 ] || [ ! -s "$tmp" ]; then
+    echo "WARN: Maven tarball download failed (rc=$rc)." >&2
+    return 1
+  fi
+
+  rm -rf /tmp/maven-unpack
+  mkdir -p /tmp/maven-unpack
+  tar -xzf "$tmp" -C /tmp/maven-unpack
+  local sub
+  sub=$(find /tmp/maven-unpack -maxdepth 2 -type f -path '*/bin/mvn' | head -1 | sed 's|/bin/mvn||')
+  if [ -z "$sub" ] || [ ! -x "$sub/bin/mvn" ]; then
+    echo "WARN: unpacked Maven layout unexpected." >&2
+    return 1
+  fi
+  mv "$sub" "$dest"
+  chmod -R a+rX "$dest"
+  rm -rf /tmp/maven-unpack "$tmp" || true
+
+  export MAVEN_HOME="$dest"
+  export PATH="$MAVEN_HOME/bin:$PATH"
+  return 0
+}
+
+ensure_maven_min_version() {
+  local need="3.6.3"
+  apply_maven_home || true
+  local have
+  have=$(maven_version)
+  if semver_ge "$have" "$need"; then
+    echo ">>> Maven OK: $have"
+    mvn -version | head -3 || true
+    return 0
+  fi
+
+  echo ">>> installing Maven (current=${have}, need>=${need}) ..."
+  set +e
+  if command -v dnf >/dev/null 2>&1; then dnf install -y maven 2>&1 | tail -5; fi
+  if command -v yum >/dev/null 2>&1; then yum install -y maven 2>&1 | tail -5; fi
+  if command -v apt-get >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq && apt-get install -y maven 2>&1 | tail -8
+  fi
+  set -e
+
+  apply_maven_home || true
+  have=$(maven_version)
+  if semver_ge "$have" "$need"; then
+    echo ">>> Maven OK after package install: $have"
+    mvn -version | head -3 || true
+    return 0
+  fi
+
+  install_maven_tarball || true
+  apply_maven_home || true
+  have=$(maven_version)
+  if semver_ge "$have" "$need"; then
+    echo ">>> Maven OK after tarball bootstrap: $have"
+    mvn -version | head -3 || true
+    return 0
+  fi
+
+  echo "ERROR: 需要 Maven >= ${need}（当前 ${have}）。" >&2
+  mvn -version 2>&1 | head -4 >&2 || true
+  exit 12
+}
+
 retry_git_fetch() {
   local fetch_cmd="$1"
   local attempts=4
@@ -563,6 +697,7 @@ if [ "$FRONTEND_ONLY" != "1" ]; then
   require_cmd mvn 7
   require_cmd java 8
   ensure_java21_for_build
+  ensure_maven_min_version
 
   cd backend
   # 强制 Maven 使用该 JAVA_HOME（避免系统默认仍指向 JDK8）
@@ -621,8 +756,17 @@ if ($DryRun) {
 }
 
 Write-Info "检查 SSH 免密登录：$User@$Server ..."
-ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$User@$Server" "echo SSH_OK" | Out-Host
-if ($LASTEXITCODE -ne 0) {
+$sshOk = $false
+for ($i = 1; $i -le 3; $i++) {
+  ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o StrictHostKeyChecking=accept-new "$User@$Server" "echo SSH_OK" | Out-Host
+  if ($LASTEXITCODE -eq 0) {
+    $sshOk = $true
+    break
+  }
+  Write-Warn2 "SSH check failed ($i/3), retrying..."
+  Start-Sleep -Seconds (2 * $i)
+}
+if (-not $sshOk) {
   throw "无法免密 SSH 到 $User@$Server。请先配置 SSH key，或在能登录服务器的终端手动执行部署命令；脚本已避免继续挂住。"
 }
 
@@ -637,12 +781,25 @@ if ($LASTEXITCODE -ne 0) {
   throw "生成 git bundle 失败（$bundleFile）"
 }
 Write-Info "上传 bundle 到服务器 /tmp/kal-deploy.bundle ..."
-scp -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new "$bundleFile" "${User}@${Server}:/tmp/kal-deploy.bundle" | Out-Host
-if ($LASTEXITCODE -ne 0) {
-  throw "上传 git bundle 失败（scp exit code = $LASTEXITCODE）"
+$bundleUploaded = $false
+for ($i = 1; $i -le 3; $i++) {
+  scp -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o StrictHostKeyChecking=accept-new "$bundleFile" "${User}@${Server}:/tmp/kal-deploy.bundle" | Out-Host
+  if ($LASTEXITCODE -eq 0) {
+    $bundleUploaded = $true
+    break
+  }
+  Write-Warn2 "scp bundle failed ($i/3), retrying..."
+  Start-Sleep -Seconds (2 * $i)
 }
-$remoteScript = $remoteScript.Replace('__BUNDLE_ENABLED__', '1')
-$remoteScript = $remoteScript.Replace('__BUNDLE_PATH__', '/tmp/kal-deploy.bundle')
+if (-not $bundleUploaded) {
+  Write-Warn2 "上传 bundle 失败，继续走服务器直连 GitHub（网络不稳时成功率会下降）。"
+  $remoteScript = $remoteScript.Replace('__BUNDLE_ENABLED__', '0')
+  $remoteScript = $remoteScript.Replace('__BUNDLE_PATH__', '')
+}
+else {
+  $remoteScript = $remoteScript.Replace('__BUNDLE_ENABLED__', '1')
+  $remoteScript = $remoteScript.Replace('__BUNDLE_PATH__', '/tmp/kal-deploy.bundle')
+}
 
 Write-Info "ssh $User@$Server -> 拉取最新代码、重新构建并重启..."
 $remoteScript | ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$User@$Server" "bash -s"

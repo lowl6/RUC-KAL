@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 import { projectsApi, personalCardsApi } from '@/api/projects'
+import { workspaceApi, PHASE_LABEL, STATUSES as WS_STATUSES } from '@/api/workspace'
 import { normalizeProject, normalizePersonalCard, normalizeUser } from '@/api/normalize'
 import Icon from '@/components/Icon.vue'
 
@@ -11,9 +12,11 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const user = useUserStore()
-const tab = ref(route.query.tab === 'personal' || route.query.tab === 'settings' ? route.query.tab : 'projects')
+const VALID_TABS = ['workspaces', 'projects', 'personal', 'settings']
+const tab = ref(VALID_TABS.includes(route.query.tab) ? route.query.tab : 'workspaces')
 
 const myProjects = ref([])
+const myWorkspaces = ref([])
 const myCard = ref(null)
 const loading = ref(false)
 const error = ref('')
@@ -37,10 +40,16 @@ async function toggleNotifyEmail (v) {
 }
 
 const tabs = [
-  { value: 'projects', label: '我的项目卡', icon: 'briefcase' },
-  { value: 'personal', label: '我的个人卡', icon: 'target' },
-  { value: 'settings', label: '账户设置', icon: 'settings' }
+  { value: 'workspaces', label: '我的项目',   icon: 'compass'   },
+  { value: 'projects',   label: '我的项目卡', icon: 'briefcase' },
+  { value: 'personal',   label: '我的个人卡', icon: 'target'    },
+  { value: 'settings',   label: '账户设置',   icon: 'settings'  }
 ]
+const wsStatusMap = WS_STATUSES
+const phaseLabel = PHASE_LABEL
+
+function gotoWorkspace (id) { router.push(`/workspaces/${id}`) }
+function gotoCreateWorkspace () { router.push('/workspaces/new') }
 
 const statusMap = {
   recruiting: { label: '组队中' },
@@ -57,15 +66,18 @@ async function loadMine() {
   loading.value = true
   error.value = ''
   try {
-    const [projects, card] = await Promise.all([
-      projectsApi.mine(),
-      personalCardsApi.mine()
+    const [projects, card, workspaces] = await Promise.all([
+      projectsApi.mine().catch(() => []),
+      personalCardsApi.mine().catch(() => null),
+      workspaceApi.mine().catch(() => []),
     ])
     myProjects.value = (projects || []).map(normalizeProject)
     myCard.value = card ? normalizePersonalCard(card) : null
+    myWorkspaces.value = workspaces || []
   } catch (e) {
     error.value = '个人数据加载失败：' + (e.message || '请重新登录')
     myProjects.value = []
+    myWorkspaces.value = []
     myCard.value = null
   } finally {
     loading.value = false
@@ -84,9 +96,7 @@ async function refreshMine() {
 }
 
 watch(() => route.query.tab, (value) => {
-  if (value === 'projects' || value === 'personal' || value === 'settings') {
-    tab.value = value
-  }
+  if (VALID_TABS.includes(value)) tab.value = value
 })
 
 watch(() => route.query.refresh, async () => {
@@ -119,12 +129,12 @@ onActivated(refreshMine)
       </div>
       <div class="kmc-profile-stats">
         <div>
-          <dt>{{ myProjects.length }}</dt>
-          <dd>项目卡</dd>
+          <dt>{{ myWorkspaces.length }}</dt>
+          <dd>项目</dd>
         </div>
         <div>
-          <dt>01</dt>
-          <dd>个人卡</dd>
+          <dt>{{ myProjects.length }}</dt>
+          <dd>项目卡</dd>
         </div>
         <div>
           <dt>{{ unreadMessages }}</dt>
@@ -150,13 +160,89 @@ onActivated(refreshMine)
       </button>
     </nav>
 
+    <!-- 我的项目（工作空间） -->
+    <section v-if="tab === 'workspaces'" class="kmc-section">
+      <div class="kmc-section-head">
+        <div>
+          <h2 class="kmc-section-title">
+            <span class="kal-serial">i.</span>
+            <span>我的项目</span>
+          </h2>
+          <p class="kmc-section-sub">追踪进度、维护里程碑、向工作人员发起求助。所有成员共享同一份项目数据。</p>
+        </div>
+        <button class="kal-btn" @click="gotoCreateWorkspace">
+          <Icon name="plus" :size="14" :stroke="2" />
+          <span>新建项目</span>
+        </button>
+      </div>
+
+      <div v-if="!myWorkspaces.length" class="kal-card kmc-empty">
+        <div class="kmc-empty-eyebrow">No&nbsp;Workspace</div>
+        <h3>还没有进行中的项目</h3>
+        <p>当你和队友确定要做某件事，就把它登记成一个「项目」——拥有里程碑、进度条与一条专属的工作人员沟通通道。</p>
+        <button class="kal-btn kal-btn-sm" @click="gotoCreateWorkspace">
+          <Icon name="plus" :size="13" :stroke="2" /><span>建立第一个项目</span>
+        </button>
+      </div>
+
+      <div v-else class="kmc-ws-grid">
+        <article
+          v-for="w in myWorkspaces"
+          :key="w.workspaceId"
+          class="kal-card kal-card-hoverable kmc-ws"
+          @click="gotoWorkspace(w.workspaceId)"
+          tabindex="0"
+          role="button"
+        >
+          <header class="kmc-ws-head">
+            <div class="kmc-ws-eyebrow">
+              <span class="kmc-ws-phase">{{ phaseLabel[w.phase] || w.phase }}</span>
+              <span class="kmc-ws-sep">/</span>
+              <span>{{ w.competitionShort || '自由项目' }}</span>
+            </div>
+            <span class="kmc-status">
+              <span class="kmc-status-dot" :class="`kmc-status-dot--${wsStatusMap[w.status]?.dot || 'closed'}`"></span>
+              <span>{{ wsStatusMap[w.status]?.label || w.status }}</span>
+            </span>
+          </header>
+          <h3 class="kmc-ws-title">{{ w.title }}</h3>
+          <p class="kmc-ws-summary">{{ w.summary || '暂无项目简述' }}</p>
+
+          <div class="kmc-ws-progress">
+            <div class="kmc-ws-progress-bar">
+              <span :style="{ width: (w.progress || 0) + '%' }"></span>
+            </div>
+            <span class="kmc-ws-progress-num">{{ w.progress || 0 }}%</span>
+          </div>
+
+          <footer class="kmc-ws-meta">
+            <span class="kmc-meta-item">
+              <Icon name="users" :size="13" />
+              <span>{{ w.memberCount }} 位成员</span>
+            </span>
+            <span class="kmc-meta-item">
+              <Icon name="check" :size="13" />
+              <span>里程碑 {{ w.milestoneDone }} / {{ w.milestoneTotal }}</span>
+            </span>
+            <span class="kmc-meta-item kmc-ws-tickets" :class="{ 'is-hot': w.openTickets > 0 }">
+              <Icon name="message" :size="13" />
+              <span>{{ w.openTickets > 0 ? `${w.openTickets} 条未结工单` : '无活跃工单' }}</span>
+            </span>
+          </footer>
+        </article>
+      </div>
+    </section>
+
     <!-- 我的项目卡 -->
     <section v-if="tab === 'projects'" class="kmc-section">
       <div class="kmc-section-head">
-        <h2 class="kmc-section-title">
-          <span class="kal-serial">i.</span>
-          <span>我发布的项目卡</span>
-        </h2>
+        <div>
+          <h2 class="kmc-section-title">
+            <span class="kal-serial">ii.</span>
+            <span>我发布的项目卡</span>
+          </h2>
+          <p class="kmc-section-sub">「项目卡」= 招募广告。已组队成功的同学可在「我的项目」追踪真实进度。</p>
+        </div>
         <button class="kal-btn" @click="router.push('/projects/new')">
           <Icon name="plus" :size="14" :stroke="2" />
           <span>新建项目卡</span>
@@ -238,7 +324,7 @@ onActivated(refreshMine)
     <section v-if="tab === 'personal'" class="kmc-section">
       <div class="kmc-section-head">
         <h2 class="kmc-section-title">
-          <span class="kal-serial">ii.</span>
+          <span class="kal-serial">iii.</span>
           <span>我的个人卡</span>
         </h2>
         <button class="kal-btn" @click="router.push('/personal-cards/edit')">
@@ -671,10 +757,157 @@ onActivated(refreshMine)
 .kmc-settings-desc { font-size: 11px; color: var(--kal-text-subtle); margin-top: 4px; letter-spacing: 0.5px; }
 .kmc-settings-input { width: auto; max-width: 220px; padding: 6px 10px; font-size: var(--kal-text-sm); }
 
+.kmc-section-head > div { display: flex; flex-direction: column; gap: 6px; }
+.kmc-section-sub { color: var(--kal-text-subtle); font-size: 12.5px; line-height: 1.7; max-width: 560px; letter-spacing: 0.3px; }
+
+/* ========== 我的项目（工作空间） ========== */
+.kmc-ws-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 18px;
+}
+.kmc-ws {
+  padding: 24px 26px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  transition: transform var(--kal-duration-2), box-shadow var(--kal-duration-2), border-color var(--kal-duration-2);
+}
+.kmc-ws::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 22px; bottom: 22px;
+  width: 2px;
+  background: var(--kal-primary-600);
+  border-radius: 2px;
+  opacity: 0.6;
+  transition: opacity var(--kal-duration-2), background var(--kal-duration-2);
+}
+.kmc-ws:hover::before, .kmc-ws:focus-visible::before { opacity: 1; }
+.kmc-ws:focus-visible { outline: none; border-color: var(--kal-primary-300); }
+.kmc-ws-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.kmc-ws-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  color: var(--kal-text-subtle);
+  text-transform: uppercase;
+}
+.kmc-ws-phase {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--kal-primary-50);
+  color: var(--kal-primary-700);
+  border-radius: var(--kal-radius-xs);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: none;
+  font-size: 11px;
+}
+.kmc-ws-sep { color: var(--kal-gray-300); }
+.kmc-ws-title {
+  font-family: var(--kal-font-serif);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--kal-text-strong);
+  margin: 0;
+  line-height: 1.4;
+}
+.kmc-ws-summary {
+  color: var(--kal-text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.kmc-ws-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.kmc-ws-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--kal-bg-subtle);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.kmc-ws-progress-bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--kal-primary-500), var(--kal-primary-700));
+  border-radius: 4px;
+  transition: width var(--kal-duration-3) var(--kal-ease-out);
+}
+.kmc-ws-progress-num {
+  font-family: var(--kal-font-serif);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--kal-text-strong);
+  min-width: 38px;
+  text-align: right;
+  letter-spacing: 0.5px;
+}
+.kmc-ws-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--kal-text-muted);
+  padding-top: 12px;
+  border-top: 1px dashed var(--kal-divider);
+}
+.kmc-ws-tickets.is-hot { color: var(--kal-primary-700); font-weight: 500; }
+
+/* ========== 空状态 ========== */
+.kmc-empty {
+  padding: 48px 36px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.kmc-empty-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  color: var(--kal-text-subtle);
+  text-transform: uppercase;
+}
+.kmc-empty h3 {
+  font-family: var(--kal-font-serif);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--kal-text-strong);
+  margin: 0;
+}
+.kmc-empty p {
+  color: var(--kal-text-muted);
+  font-size: 13.5px;
+  line-height: 1.85;
+  max-width: 540px;
+  margin: 0;
+}
+
 @media (max-width: 768px) {
   .kmc-profile { flex-direction: column; align-items: flex-start; padding: 22px; gap: 22px; }
   .kmc-profile-stats { padding-left: 0; padding-top: 22px; border-left: none; border-top: 1px solid var(--kal-border); width: 100%; gap: 28px; }
   .kmc-tabs { width: 100%; overflow-x: auto; }
   .kmc-project, .kmc-personal, .kmc-settings { padding: 22px; }
+  .kmc-ws-grid { grid-template-columns: 1fr; }
 }
 </style>

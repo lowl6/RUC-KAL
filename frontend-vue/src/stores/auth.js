@@ -12,6 +12,11 @@ export const useAuthStore = defineStore('auth', () => {
     me.value && (me.value.role === 'admin' || me.value.role === 'super_admin')
   )
   const isSuperAdmin = computed(() => me.value?.role === 'super_admin')
+  const isStaff = computed(() => me.value?.role === 'staff')
+  /** 工作人员视角：staff / admin / super_admin 都能进工作台 */
+  const isStaffLevel = computed(() =>
+    me.value && (me.value.role === 'staff' || me.value.role === 'admin' || me.value.role === 'super_admin')
+  )
 
   function _setToken (data) {
     token.value = data.token
@@ -72,7 +77,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    me, token, isLoggedIn, isAdmin, isSuperAdmin,
+    me, token, isLoggedIn, isAdmin, isSuperAdmin, isStaff, isStaffLevel,
     login, register, resetPassword, adminLogin, refreshMe, logout, setNotifyEmail,
   }
 })

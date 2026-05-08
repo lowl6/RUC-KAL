@@ -16,6 +16,16 @@ import cn.edu.ruc.kal.project.ProjectRepository;
 import cn.edu.ruc.kal.project.ProjectRole;
 import cn.edu.ruc.kal.user.User;
 import cn.edu.ruc.kal.user.UserRepository;
+import cn.edu.ruc.kal.workspace.SupportTicket;
+import cn.edu.ruc.kal.workspace.SupportTicketRepository;
+import cn.edu.ruc.kal.workspace.TicketMessage;
+import cn.edu.ruc.kal.workspace.TicketMessageRepository;
+import cn.edu.ruc.kal.workspace.Workspace;
+import cn.edu.ruc.kal.workspace.WorkspaceMember;
+import cn.edu.ruc.kal.workspace.WorkspaceMemberRepository;
+import cn.edu.ruc.kal.workspace.WorkspaceMilestone;
+import cn.edu.ruc.kal.workspace.WorkspaceMilestoneRepository;
+import cn.edu.ruc.kal.workspace.WorkspaceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -40,6 +50,11 @@ public class DataSeeder implements CommandLineRunner {
     private final CompetitionNewsRepository newsRepo;
     private final ForumPostRepository forumRepo;
     private final ForumCommentRepository forumCommentRepo;
+    private final WorkspaceRepository wsRepo;
+    private final WorkspaceMemberRepository wsMemberRepo;
+    private final WorkspaceMilestoneRepository wsMilestoneRepo;
+    private final SupportTicketRepository ticketRepo;
+    private final TicketMessageRepository ticketMsgRepo;
     private final PasswordEncoder enc;
 
     @Override
@@ -56,6 +71,7 @@ public class DataSeeder implements CommandLineRunner {
         seedProjects();
         seedForum();
         seedComments();
+        seedWorkspaces();
         log.info("[seed] done. users={}, projects={}, cards={}, forum={}, competitions={}, news={}, comments={}",
                 userRepo.count(), projectRepo.count(), cardRepo.count(), forumRepo.count(),
                 competitionRepo.count(), newsRepo.count(), forumCommentRepo.count());
@@ -88,7 +104,15 @@ public class DataSeeder implements CommandLineRunner {
         users.add(addUser("u_wang_qi",  "wang.qi@ruc.edu.cn",  "Kal@2026", "王琦",   "王琦",   "财政金融学院", "2024级", User.Role.student, null));
         users.add(addUser("u_sun_meng", "sun.meng@ruc.edu.cn", "Kal@2026", "孙萌",   "孙萌",   "信息学院",     "2023级", User.Role.student, null));
         users.add(addUser("u_liu_xin",  "liu.xin@ruc.edu.cn",  "Kal@2026", "刘欣",   "刘欣",   "艺术学院",     "2023级", User.Role.student, null));
-        users.add(addUser("u_prof_lin", "lin.shu@ruc.edu.cn",  "Kal@2026", "林书",   "林书 老师", "商学院",   null,     User.Role.teacher, null));
+        users.add(addUser("u_prof_lin", "lin.shu@ruc.edu.cn",  "Kal@2026", "林书",   "林书 老师", "商学院",   "教师",   User.Role.teacher, null));
+
+        // 工作人员（staff）：通过管理员登录入口进入「工作台」处理项目工单
+        users.add(addUser("u_staff_zhao", "kal-staff-zhao@ruc.edu.cn", "Kal#Staff-2026",
+                "赵老师", "赵老师（项目支持）", "知行创坊运营组", "工作人员", User.Role.staff,
+                "ticket.read,ticket.reply"));
+        users.add(addUser("u_staff_qian", "kal-staff-qian@ruc.edu.cn", "Kal#Staff-2026",
+                "钱老师", "钱老师（导师匹配）", "知行创坊运营组", "工作人员", User.Role.staff,
+                "ticket.read,ticket.reply"));
     }
 
     private User addUser(String id, String email, String pwd, String name, String displayName,
@@ -381,5 +405,88 @@ public class DataSeeder implements CommandLineRunner {
                 .postId("fp_demo_3").authorId("u_li_yan").authorName("李雁")
                 .content("「评审记住的是为什么是你」这句话，我截图存了。")
                 .likeCount(8).status("published").createdAt(LocalDateTime.now().minusHours(48)).build());
+    }
+
+    /* ===================== 项目（工作空间） ===================== */
+
+    private void seedWorkspaces() {
+        Workspace ws1 = wsRepo.save(Workspace.builder()
+                .workspaceId("ws_demo_kal_1")
+                .title("校园闲置物品流转小程序 · 项目组")
+                .summary("由项目卡组队成功后转入实际推进。已立项，准备校赛答辩材料。")
+                .competitionShort("中国国际大学生创新大赛")
+                .competitionTarget("校赛一等奖 / 推荐至省赛")
+                .ownerId("u_li_yan")
+                .assignedStaffId("u_staff_zhao")
+                .phase(Workspace.Phase.executing)
+                .progress(45)
+                .status(Workspace.Status.active)
+                .createdAt(LocalDateTime.now().minusDays(20))
+                .updatedAt(LocalDateTime.now().minusHours(6))
+                .build());
+        addMember(ws1, "u_li_yan",   WorkspaceMember.Role.owner,  "项目负责人 / 产品", LocalDateTime.now().minusDays(20));
+        addMember(ws1, "u_sun_meng", WorkspaceMember.Role.member, "前端工程师",     LocalDateTime.now().minusDays(18));
+        addMember(ws1, "u_chen_yu",  WorkspaceMember.Role.member, "内容 / 品牌",     LocalDateTime.now().minusDays(15));
+
+        addMilestone(ws1, "立项书定稿",     LocalDate.now().minusDays(7),  WorkspaceMilestone.Status.done,    1);
+        addMilestone(ws1, "原型 V1 完成",  LocalDate.now().minusDays(2),  WorkspaceMilestone.Status.done,    2);
+        addMilestone(ws1, "校赛 PPT 初稿", LocalDate.now().plusDays(7),   WorkspaceMilestone.Status.doing,   3);
+        addMilestone(ws1, "校赛答辩",      LocalDate.now().plusDays(20),  WorkspaceMilestone.Status.pending, 4);
+
+        // 一个示例工单：成员发起请求 staff 协助匹配导师
+        SupportTicket t1 = ticketRepo.save(SupportTicket.builder()
+                .ticketId("tk_demo_advisor_1")
+                .workspaceId(ws1.getWorkspaceId())
+                .openerId("u_li_yan")
+                .assigneeStaffId("u_staff_zhao")
+                .subject("希望对接一位有创业指导经验的导师")
+                .category(SupportTicket.Category.advisor)
+                .status(SupportTicket.Status.in_progress)
+                .createdAt(LocalDateTime.now().minusDays(2))
+                .lastActivityAt(LocalDateTime.now().minusHours(3))
+                .build());
+        ticketMsgRepo.save(TicketMessage.builder()
+                .ticketId(t1.getTicketId()).authorId("u_li_yan").authorRole("student")
+                .content("赵老师好，我们已经完成原型，希望对接一位有创业指导背景的导师，重点想问下校赛 PPT 怎么讲清楚商业模式。")
+                .createdAt(LocalDateTime.now().minusDays(2)).build());
+        ticketMsgRepo.save(TicketMessage.builder()
+                .ticketId(t1.getTicketId()).authorId("u_staff_zhao").authorRole("staff")
+                .content("收到。我看了你们的项目卡，比较合适的是商学院林书老师，已帮你在通讯录里同步过基本情况，下周三上午 10 点空，要不要约一次面谈？")
+                .createdAt(LocalDateTime.now().minusHours(3)).build());
+
+        Workspace ws2 = wsRepo.save(Workspace.builder()
+                .workspaceId("ws_demo_kal_2")
+                .title("城市步行可达性可视化 · 项目组")
+                .summary("空间统计 + 数据可视化方向，目标省赛入围。")
+                .competitionShort("挑战杯")
+                .competitionTarget("省赛入围")
+                .ownerId("u_zhao_xin")
+                .assignedStaffId(null)
+                .phase(Workspace.Phase.planning)
+                .progress(20)
+                .status(Workspace.Status.active)
+                .createdAt(LocalDateTime.now().minusDays(10))
+                .updatedAt(LocalDateTime.now().minusHours(20))
+                .build());
+        addMember(ws2, "u_zhao_xin", WorkspaceMember.Role.owner,  "项目负责人 / 数据", LocalDateTime.now().minusDays(10));
+        addMember(ws2, "u_wang_qi",  WorkspaceMember.Role.member, "数据分析",     LocalDateTime.now().minusDays(8));
+        addMilestone(ws2, "数据爬取与清洗", LocalDate.now().minusDays(2), WorkspaceMilestone.Status.done,    1);
+        addMilestone(ws2, "可达性算法设计", LocalDate.now().plusDays(10), WorkspaceMilestone.Status.doing,   2);
+        addMilestone(ws2, "可视化原型",     LocalDate.now().plusDays(25), WorkspaceMilestone.Status.pending, 3);
+        addMilestone(ws2, "学术论文初稿",   LocalDate.now().plusDays(45), WorkspaceMilestone.Status.pending, 4);
+    }
+
+    private void addMember(Workspace w, String userId, WorkspaceMember.Role role, String note, LocalDateTime joinedAt) {
+        wsMemberRepo.save(WorkspaceMember.builder()
+                .workspaceId(w.getWorkspaceId())
+                .userId(userId).role(role).roleNote(note).joinedAt(joinedAt).build());
+    }
+
+    private void addMilestone(Workspace w, String title, LocalDate due, WorkspaceMilestone.Status st, int order) {
+        wsMilestoneRepo.save(WorkspaceMilestone.builder()
+                .workspaceId(w.getWorkspaceId())
+                .title(title).dueDate(due).status(st).sortOrder(order)
+                .completedAt(st == WorkspaceMilestone.Status.done ? LocalDateTime.now().minusDays(1) : null)
+                .createdAt(LocalDateTime.now().minusDays(15)).build());
     }
 }

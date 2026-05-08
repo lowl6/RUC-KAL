@@ -21,8 +21,9 @@ public class AuthDtos {
             @NotBlank String name,
             String deptName,
             String grade,
+            /** 学位类型：本科 / 研究生 / 教师；其他值（含"工作人员"/"校外"）一律拒绝 */
+            String degreeType,
             @NotBlank String emailCode,
-            // 兼容老前端字段，但已不再强制（注册阶段仅校验邮箱验证码）
             String captchaId,
             String captchaCode
     ) {}

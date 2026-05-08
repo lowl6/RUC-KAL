@@ -86,7 +86,7 @@ async function resetPwd (u) {
   alert(`新密码：${r.temporaryPassword}\n请尽快通过线下渠道交付给用户。`)
 }
 async function setRole (u) {
-  const role = prompt(`将「${u.displayName || u.email}」设为何种角色？\n可选：student / teacher / admin / super_admin`, u.role)
+  const role = prompt(`将「${u.displayName || u.email}」设为何种角色？\n可选：student / teacher / staff / admin / super_admin`, u.role)
   if (!role) return
   await adminApi.updateUserRole(u.userId, role, [])
   await load()
@@ -96,7 +96,7 @@ function statusLabel (s) {
   return ({ active: '正常', disabled: '已停用', banned: '已封禁', pending_first_login: '待首登' })[s] || s
 }
 function roleLabel (r) {
-  return ({ student: '学生', teacher: '教师', admin: '管理员', super_admin: '超级管理员' })[r] || r
+  return ({ student: '学生', teacher: '教师', staff: '工作人员', admin: '管理员', super_admin: '超级管理员' })[r] || r
 }
 </script>
 
@@ -137,6 +137,7 @@ function roleLabel (r) {
         <option value="">全部角色</option>
         <option value="student">学生</option>
         <option value="teacher">教师</option>
+        <option value="staff">工作人员</option>
         <option value="admin">管理员</option>
         <option value="super_admin">超级管理员</option>
       </select>
@@ -220,9 +221,11 @@ function roleLabel (r) {
               <select class="kal-input" v-model="newUser.role">
                 <option value="student">学生</option>
                 <option value="teacher">教师</option>
+                <option value="staff">工作人员（项目支持）</option>
                 <option v-if="auth.isSuperAdmin" value="admin">管理员</option>
                 <option v-if="auth.isSuperAdmin" value="super_admin">超级管理员</option>
               </select>
+              <div class="kal-hint">「工作人员」会出现在「工作台」处理项目工单；该角色不开放自助注册。</div>
             </div>
             <div class="kal-field">
               <label class="kal-label">初始密码</label>

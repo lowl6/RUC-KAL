@@ -13,11 +13,13 @@ const auth = useAuthStore()
 const mode = ref('login') // 'login' | 'register' | 'reset'
 const currentYear = new Date().getFullYear()
 const admissionYears = Array.from({ length: 9 }, (_, i) => String(currentYear - i))
-const degreeTypes = ['本科', '研究生', '教师', '校外']
+// 仅这三类可以自助注册；「工作人员」「校外」必须由管理员后台手动开通
+const degreeTypes = ['本科', '研究生', '教师']
 const form = ref({
   name: '', email: '', password: '',
   deptName: '', admissionYear: String(currentYear), degreeType: '本科', emailCode: ''
 })
+const isTeacher = computed(() => form.value.degreeType === '教师')
 const captcha = ref({ id: '', code: '' })
 const captchaRef = ref(null)
 const degreeOpen = ref(false)
@@ -38,7 +40,9 @@ const formValid = computed(() => {
   if (mode.value === 'login' && !captcha.value.code) return false
   if (mode.value === 'register') {
     if (form.value.name.trim().length < 2) return false
-    if (!form.value.admissionYear || !form.value.degreeType) return false
+    if (!form.value.degreeType) return false
+    // 教师无需"入学年份"；学生必须选择
+    if (!isTeacher.value && !form.value.admissionYear) return false
     if (!form.value.emailCode || form.value.emailCode.length < 4) return false
   }
   if (mode.value === 'reset') {
@@ -49,7 +53,9 @@ const formValid = computed(() => {
 })
 
 const admissionLabel = computed(() =>
-  `${form.value.admissionYear} 入学 · ${form.value.degreeType}`
+  isTeacher.value
+    ? '教师'
+    : `${form.value.admissionYear} 入学 · ${form.value.degreeType}`
 )
 
 async function sendEmailCode () {
@@ -107,7 +113,8 @@ async function submit () {
         password: form.value.password,
         name: form.value.name.trim(),
         deptName: form.value.deptName,
-        grade: admissionLabel.value,
+        grade: isTeacher.value ? '教师' : admissionLabel.value,
+        degreeType: form.value.degreeType,
         emailCode: form.value.emailCode.trim(),
         captchaId: captcha.value.id,
         captchaCode: captcha.value.code,
@@ -260,11 +267,22 @@ const features = [
               <input id="kl-dept" class="kal-input" v-model="form.deptName" placeholder="如：信息学院" />
             </div>
             <div class="kl-field">
-              <label class="kal-label kal-label-required" for="kl-admission-year">入学时间</label>
+              <label class="kal-label kal-label-required" for="kl-admission-year">
+                {{ isTeacher ? '身份' : '入学时间' }}
+              </label>
               <div class="kl-admission">
-                <select id="kl-admission-year" class="kl-admission-year" v-model="form.admissionYear">
+                <select
+                  v-if="!isTeacher"
+                  id="kl-admission-year"
+                  class="kl-admission-year"
+                  v-model="form.admissionYear"
+                >
                   <option v-for="y in admissionYears" :key="y" :value="y">{{ y }}</option>
                 </select>
+                <div v-else class="kl-admission-teacher">
+                  <Icon name="shield" :size="12" />
+                  <span>本校教师</span>
+                </div>
                 <div class="kl-degree">
                   <button
                     type="button"
@@ -356,7 +374,7 @@ const features = [
         <p class="kl-note">
           登录即视为同意 <a href="#">服务条款</a> 与 <a href="#">隐私政策</a>
           <br/><br/>
-          <span class="kl-meta">校外合作伙伴 / 嘉宾导师请联系管理员邀请开通</span>
+          <span class="kl-meta">工作人员 / 校外嘉宾导师请联系管理员邀请开通账号</span>
         </p>
       </div>
     </main>
@@ -608,6 +626,19 @@ const features = [
   letter-spacing: 1px;
   cursor: pointer;
 }
+.kl-admission-teacher {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  font-family: var(--kal-font-serif);
+  font-size: 13px;
+  color: var(--kal-text-strong);
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+.kl-admission-teacher :deep(.kal-icon) { color: var(--kal-primary-700); }
 .kl-degree {
   position: relative;
   padding-left: 6px;
