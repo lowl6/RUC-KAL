@@ -16,6 +16,7 @@ public class WorkspaceDtos {
             @Size(max = 200)           String summary,
             @Size(max = 60)            String competitionShort,
             @Size(max = 100)           String competitionTarget,
+            String                     assignedStaffId,
             String                     phase,
             Integer                    progress
     ) {}
@@ -25,6 +26,7 @@ public class WorkspaceDtos {
             @Size(max = 200) String summary,
             @Size(max = 60)  String competitionShort,
             @Size(max = 100) String competitionTarget,
+            String           assignedStaffId,
             String           phase,
             Integer          progress,
             String           status
@@ -61,6 +63,10 @@ public class WorkspaceDtos {
             @NotBlank String status
     ) {}
 
+    public record AssignStaffReq(
+            String staffId
+    ) {}
+
     /* ==================== Responses ==================== */
 
     public record MemberView(
@@ -82,6 +88,14 @@ public class WorkspaceDtos {
             String status,
             Integer sortOrder,
             LocalDateTime completedAt
+    ) {}
+
+    public record StaffView(
+            String userId,
+            String displayName,
+            String email,
+            String deptName,
+            String grade
     ) {}
 
     public record WorkspaceListItem(

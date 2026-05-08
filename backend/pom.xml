@@ -15,7 +15,7 @@
     <artifactId>kal-backend</artifactId>
     <version>0.1.0</version>
     <name>kal-backend</name>
-    <description>知行创坊 KAL · Backend (Spring Boot 3 + H2 in-memory)</description>
+    <description>知行创坊 KAL · Backend (Spring Boot 3 + persistent H2 / MySQL)</description>
 
     <properties>
         <java.version>21</java.version>

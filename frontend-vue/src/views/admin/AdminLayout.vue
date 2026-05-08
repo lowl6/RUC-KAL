@@ -12,7 +12,6 @@ const menus = [
   { key: 'competitions', label: '赛事发布',   icon: 'trophy',   to: '/admin/competitions' },
   { key: 'news',         label: '资讯发布',   icon: 'edit',     to: '/admin/news' },
   { key: 'dashboard',    label: '运营总览',   icon: 'compass',  to: '/admin/dashboard' },
-  { key: 'tickets',      label: '工单工作台', icon: 'message',  to: '/staff/tickets' },
   { key: 'forum',        label: '论坛治理',   icon: 'message',  to: '/admin/forum' },
   { key: 'projects',     label: '项目卡治理', icon: 'document', to: '/admin/projects' },
   { key: 'users',        label: '账号管理',   icon: 'user',     to: '/admin/users', superOnly: true },

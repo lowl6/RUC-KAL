@@ -66,7 +66,7 @@ public class SecurityConfig {
                                 "/actuator/health"
                         ).permitAll()
                         .requestMatchers("/api/v1/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
-                        .requestMatchers("/api/v1/staff/**").hasAnyRole("STAFF", "ADMIN", "SUPER_ADMIN")
+                        .requestMatchers("/api/v1/staff/**").hasRole("STAFF")
                         .anyRequest().authenticated()
                 )
                 .headers(h -> h.frameOptions(f -> f.sameOrigin())) // h2-console

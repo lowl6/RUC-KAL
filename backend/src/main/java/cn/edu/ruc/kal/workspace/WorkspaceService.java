@@ -29,6 +29,7 @@ public class WorkspaceService {
 
     @Transactional
     public WorkspaceListItem create(String userId, CreateWorkspaceReq req) {
+        User assignedStaff = resolveStaff(req.assignedStaffId(), false);
         Workspace w = Workspace.builder()
                 .workspaceId("ws_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16))
                 .title(req.title().trim())
@@ -36,6 +37,7 @@ public class WorkspaceService {
                 .competitionShort(safe(req.competitionShort()))
                 .competitionTarget(safe(req.competitionTarget()))
                 .ownerId(userId)
+                .assignedStaffId(assignedStaff == null ? null : assignedStaff.getUserId())
                 .phase(parsePhase(req.phase()))
                 .progress(clampProgress(req.progress()))
                 .status(Workspace.Status.active)
@@ -75,10 +77,12 @@ public class WorkspaceService {
     @Transactional
     public WorkspaceListItem update(String userId, String workspaceId, UpdateWorkspaceReq req) {
         Workspace w = mustOwner(userId, workspaceId);
+        User assignedStaff = req.assignedStaffId() == null ? null : resolveStaff(req.assignedStaffId(), true);
         if (req.title() != null && !req.title().isBlank()) w.setTitle(req.title().trim());
         if (req.summary() != null) w.setSummary(req.summary());
         if (req.competitionShort() != null) w.setCompetitionShort(req.competitionShort());
         if (req.competitionTarget() != null) w.setCompetitionTarget(req.competitionTarget());
+        if (req.assignedStaffId() != null) w.setAssignedStaffId(assignedStaff == null ? null : assignedStaff.getUserId());
         if (req.phase() != null) w.setPhase(parsePhase(req.phase()));
         if (req.progress() != null) w.setProgress(clampProgress(req.progress()));
         if (req.status() != null) {
@@ -88,6 +92,29 @@ public class WorkspaceService {
         w.setUpdatedAt(LocalDateTime.now());
         wsRepo.save(w);
         return toListItem(w);
+    }
+
+    @Transactional
+    public WorkspaceListItem assignStaff(String userId, String workspaceId, AssignStaffReq req) {
+        Workspace w = mustOwner(userId, workspaceId);
+        User staff = resolveStaff(req.staffId(), true);
+        w.setAssignedStaffId(staff == null ? null : staff.getUserId());
+        w.setUpdatedAt(LocalDateTime.now());
+        wsRepo.save(w);
+        return toListItem(w);
+    }
+
+    @Transactional(readOnly = true)
+    public List<StaffView> listActiveStaff() {
+        return userRepo.findByRoleAndStatusOrderByDisplayNameAsc(User.Role.staff, User.Status.active)
+                .stream()
+                .map(u -> new StaffView(
+                        u.getUserId(),
+                        u.getDisplayName(),
+                        u.getEmail(),
+                        safe(u.getDeptName()),
+                        safe(u.getGrade())))
+                .toList();
     }
 
     /** 项目成员（不止 owner）也可以推动进度，但不能改成员关系。 */
@@ -197,16 +224,17 @@ public class WorkspaceService {
 
     @Transactional
     public TicketSummary createTicket(String userId, String workspaceId, CreateTicketReq req) {
-        mustMember(userId, workspaceId);
+        Workspace w = mustMember(userId, workspaceId);
         User opener = userRepo.findById(userId).orElseThrow(() -> new BizException(401, "未登录"));
 
         SupportTicket t = SupportTicket.builder()
                 .ticketId("tk_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16))
                 .workspaceId(workspaceId)
                 .openerId(userId)
+                .assigneeStaffId(w.getAssignedStaffId())
                 .subject(req.subject().trim())
                 .category(parseCategory(req.category()))
-                .status(SupportTicket.Status.open)
+                .status(w.getAssignedStaffId() == null ? SupportTicket.Status.open : SupportTicket.Status.in_progress)
                 .createdAt(LocalDateTime.now())
                 .lastActivityAt(LocalDateTime.now())
                 .ownerReadAt(LocalDateTime.now())
@@ -421,7 +449,19 @@ public class WorkspaceService {
     }
 
     public static boolean isStaffRole(User.Role role) {
-        return role == User.Role.staff || role == User.Role.admin || role == User.Role.super_admin;
+        return role == User.Role.staff;
+    }
+
+    private User resolveStaff(String staffId, boolean allowBlank) {
+        if (staffId == null || staffId.isBlank()) {
+            if (allowBlank) return null;
+            return null;
+        }
+        User staff = userRepo.findById(staffId).orElseThrow(() -> new BizException(404, "工作人员不存在"));
+        if (staff.getRole() != User.Role.staff || staff.getStatus() != User.Status.active) {
+            throw new BizException("只能选择有效的工作人员账号");
+        }
+        return staff;
     }
 
     private void bump(String workspaceId) {

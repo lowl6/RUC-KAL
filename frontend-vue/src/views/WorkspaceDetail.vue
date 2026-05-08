@@ -9,6 +9,7 @@ import {
   TICKET_CATEGORIES, TICKET_CATEGORY_LABEL, TICKET_STATUSES,
   MILESTONE_STATUSES,
 } from '@/api/workspace'
+import { competitionsApi } from '@/api/projects'
 import Icon from '@/components/Icon.vue'
 
 const route = useRoute()
@@ -19,13 +20,36 @@ const workspaceId = computed(() => route.params.id)
 const detail = ref(null)
 const loading = ref(false)
 const error = ref('')
+const staffList = ref([])
+const competitions = ref([])
 
 const isOwner = computed(() => detail.value?.myRole === 'owner')
+const linkedCompetition = computed(() =>
+  competitions.value.find(c =>
+    c.shortName === detail.value?.competitionShort || c.name === detail.value?.competitionShort
+  ) || null
+)
+const linkedTimeline = computed(() => {
+  const c = linkedCompetition.value
+  if (!c) return []
+  return [
+    { label: '报名开始', date: c.registerStart, state: stepState(c.registerStart) },
+    { label: '报名截止', date: c.registerEnd, state: stepState(c.registerEnd) },
+    { label: '赛事日程', date: c.scheduleNote || '查看通知', state: 'note' },
+  ]
+})
 
 async function load () {
   loading.value = true; error.value = ''
   try {
-    detail.value = await workspaceApi.detail(workspaceId.value)
+    const [d, staff, cs] = await Promise.all([
+      workspaceApi.detail(workspaceId.value),
+      workspaceApi.staffMembers().catch(() => []),
+      competitionsApi.list().catch(() => []),
+    ])
+    detail.value = d
+    staffList.value = staff || []
+    competitions.value = cs || []
   } catch (e) {
     error.value = e.message || '加载失败'
     detail.value = null
@@ -46,6 +70,7 @@ function openEdit () {
     summary: detail.value.summary,
     competitionShort: detail.value.competitionShort,
     competitionTarget: detail.value.competitionTarget,
+    assignedStaffId: detail.value.assignedStaffId || '',
     phase: detail.value.phase,
     status: detail.value.status,
   }
@@ -57,6 +82,13 @@ async function saveEdit () {
     editing.value = false
     await load()
   } catch (e) { alert(e.message || '保存失败') }
+}
+
+async function assignStaff (staffId) {
+  try {
+    await workspaceApi.assignStaff(workspaceId.value, staffId || '')
+    await load()
+  } catch (e) { alert(e.message || '保存工作人员失败') }
 }
 
 /* ============== 进度滑块（任意成员都可推动） ============== */
@@ -220,6 +252,22 @@ function fmtDate (s) {
   if (!s) return '—'
   return String(s).slice(0, 10)
 }
+function daysLeft (dateLike) {
+  if (!dateLike) return null
+  const d = new Date(dateLike)
+  if (Number.isNaN(d.getTime())) return null
+  return Math.ceil((d.getTime() - Date.now()) / 86400000)
+}
+function stepState (dateLike) {
+  const left = daysLeft(dateLike)
+  if (left == null) return 'muted'
+  if (left < 0) return 'done'
+  if (left <= 7) return 'urgent'
+  return 'open'
+}
+function compStatusLabel (s) {
+  return ({ upcoming: '即将开放', active: '报名中', urgent: '即将截止', ended: '已结束' })[s] || s
+}
 function authorClass (role) {
   if (role === 'staff' || role === 'admin' || role === 'super_admin') return 'is-staff'
   return 'is-self'
@@ -270,7 +318,13 @@ function meId () { return auth.me?.userId || auth.me?.user_id }
           </div>
           <div class="kwd-hero-stat">
             <dt>对接工作人员</dt>
-            <dd>{{ detail.assignedStaffName || '尚未分配' }}</dd>
+            <dd v-if="!isOwner">{{ detail.assignedStaffName || '尚未分配' }}</dd>
+            <select v-else class="kwd-staff-select" :value="detail.assignedStaffId || ''" @change="assignStaff($event.target.value)">
+              <option value="">暂不指定</option>
+              <option v-for="s in staffList" :key="s.userId" :value="s.userId">
+                {{ s.displayName }} · {{ s.deptName || '工作人员' }}
+              </option>
+            </select>
           </div>
           <div class="kwd-hero-stat">
             <dt>成员</dt>
@@ -282,6 +336,36 @@ function meId () { return auth.me?.userId || auth.me?.user_id }
           </div>
         </div>
       </header>
+
+      <section v-if="linkedCompetition" class="kal-card kwd-comp-card">
+        <header class="kwd-comp-head">
+          <div>
+            <span class="kal-eyebrow">Competition Timeline</span>
+            <h2>{{ linkedCompetition.name }}</h2>
+            <p>{{ linkedCompetition.description || '暂无赛事说明' }}</p>
+          </div>
+          <div class="kwd-comp-badge">
+            <strong>{{ compStatusLabel(linkedCompetition.status) }}</strong>
+            <span v-if="daysLeft(linkedCompetition.registerEnd) !== null">
+              {{ daysLeft(linkedCompetition.registerEnd) >= 0 ? `距截止 ${daysLeft(linkedCompetition.registerEnd)} 天` : '报名已结束' }}
+            </span>
+          </div>
+        </header>
+        <div class="kwd-comp-timeline">
+          <div v-for="s in linkedTimeline" :key="s.label" class="kwd-comp-step" :class="`is-${s.state}`">
+            <span class="kwd-comp-dot"></span>
+            <div>
+              <strong>{{ s.label }}</strong>
+              <small>{{ s.date || '待定' }}</small>
+            </div>
+          </div>
+        </div>
+        <footer v-if="linkedCompetition.officialLinks?.length" class="kwd-comp-links">
+          <a v-for="l in linkedCompetition.officialLinks" :key="l.url || l.label" :href="l.url" target="_blank" rel="noopener">
+            {{ l.label || '官方链接' }}
+          </a>
+        </footer>
+      </section>
 
       <!-- 进度 -->
       <section class="kal-card kwd-card kwd-progress">
@@ -601,12 +685,32 @@ function meId () { return auth.me?.userId || auth.me?.user_id }
             <div class="kal-grid-2">
               <div class="kal-field">
                 <label class="kal-label">关联比赛</label>
-                <input class="kal-input" v-model="editForm.competitionShort" />
+                <select
+                  class="kal-input"
+                  :value="editForm.competitionShort || ''"
+                  @change="editForm.competitionShort = $event.target.value"
+                >
+                  <option value="">自由项目 / 不关联比赛</option>
+                  <option v-for="c in competitions" :key="c.competitionId" :value="c.shortName || c.name">
+                    {{ c.shortName || c.name }} · {{ compStatusLabel(c.status) }}
+                  </option>
+                </select>
+                <input class="kal-input kwd-edit-custom-comp" v-model="editForm.competitionShort" placeholder="也可以手动填写其他比赛名称" />
               </div>
               <div class="kal-field">
                 <label class="kal-label">目标</label>
                 <input class="kal-input" v-model="editForm.competitionTarget" />
               </div>
+            </div>
+            <div class="kal-field">
+              <label class="kal-label">对接工作人员</label>
+              <select class="kal-input" v-model="editForm.assignedStaffId">
+                <option value="">暂不指定</option>
+                <option v-for="s in staffList" :key="s.userId" :value="s.userId">
+                  {{ s.displayName }} · {{ s.deptName || '工作人员' }}
+                </option>
+              </select>
+              <div class="kal-hint">只显示 staff 工作人员账号，不包含管理员/超级管理员。</div>
             </div>
             <div class="kal-grid-2">
               <div class="kal-field">
@@ -723,6 +827,99 @@ function meId () { return auth.me?.userId || auth.me?.user_id }
   font-size: 14px; font-weight: 500;
   color: var(--kal-text-strong);
   letter-spacing: 0.5px;
+}
+.kwd-staff-select {
+  width: 100%;
+  max-width: 220px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--kal-border);
+  border-radius: var(--kal-radius-sm);
+  background: rgba(255,255,255,0.76);
+  color: var(--kal-text-strong);
+  font-size: 12px;
+}
+
+/* ---------- Competition timeline ---------- */
+.kwd-comp-card {
+  padding: 24px 28px;
+  margin-bottom: 18px;
+  background: linear-gradient(135deg, var(--kal-paper) 0%, #fff 100%);
+}
+.kwd-comp-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+.kwd-comp-head .kal-eyebrow { color: var(--kal-text-subtle); margin-bottom: 6px; }
+.kwd-comp-head h2 {
+  margin: 0 0 6px;
+  font-family: var(--kal-font-serif);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--kal-text-strong);
+}
+.kwd-comp-head p {
+  margin: 0;
+  max-width: 680px;
+  color: var(--kal-text-muted);
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+.kwd-comp-badge {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 10px 14px;
+  background: var(--kal-primary-50);
+  border-radius: var(--kal-radius-sm);
+  color: var(--kal-primary-700);
+}
+.kwd-comp-badge strong { font-size: 12px; letter-spacing: 1px; }
+.kwd-comp-badge span { font-size: 11px; letter-spacing: 0.5px; }
+.kwd-comp-timeline {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.kwd-comp-step {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.74);
+  border: 1px solid var(--kal-divider);
+  border-radius: var(--kal-radius-sm);
+}
+.kwd-comp-dot {
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--kal-text-subtle);
+  flex-shrink: 0;
+}
+.kwd-comp-step.is-open .kwd-comp-dot { background: var(--kal-success); }
+.kwd-comp-step.is-urgent .kwd-comp-dot { background: var(--kal-primary-600); }
+.kwd-comp-step.is-done .kwd-comp-dot { background: var(--kal-sand); }
+.kwd-comp-step strong { display: block; color: var(--kal-text-strong); font-size: 12px; letter-spacing: 0.5px; }
+.kwd-comp-step small { display: block; margin-top: 3px; color: var(--kal-text-subtle); font-size: 11px; line-height: 1.4; }
+.kwd-comp-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.kwd-comp-links a {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--kal-border);
+  color: var(--kal-primary-700);
+  font-size: 11.5px;
 }
 
 /* ---------- Card 通用 ---------- */
@@ -1071,6 +1268,7 @@ function meId () { return auth.me?.userId || auth.me?.user_id }
   transition: background .15s;
 }
 .kwd-icon-btn:hover { background: var(--kal-bg); color: var(--kal-text-strong); }
+.kwd-edit-custom-comp { margin-top: 8px; }
 
 /* ---------- 复用 MyCenter 的状态点（必须本地写一份避免 scoped 失效） ---------- */
 .kmc-status {
@@ -1088,6 +1286,9 @@ function meId () { return auth.me?.userId || auth.me?.user_id }
   .kwd { padding-left: 16px; padding-right: 16px; }
   .kwd-hero { padding: 24px 22px; }
   .kwd-card { padding: 22px; }
+  .kwd-comp-head { flex-direction: column; }
+  .kwd-comp-badge { align-items: flex-start; }
+  .kwd-comp-timeline { grid-template-columns: 1fr; }
   .kwd-ms-editor-grid { grid-template-columns: 1fr 1fr; }
 }
 </style>

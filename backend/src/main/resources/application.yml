@@ -7,16 +7,16 @@ spring:
   application:
     name: kal-backend
 
-  # ---------- H2 in-memory（开箱即用，免外部依赖） ----------
+  # ---------- H2 file（开箱即用，同时避免重启/更新后丢失已注册账号） ----------
   datasource:
-    url: jdbc:h2:mem:kal;DB_CLOSE_DELAY=-1;MODE=MySQL
+    url: ${H2_URL:jdbc:h2:file:./data/kal;MODE=MySQL;AUTO_SERVER=TRUE}
     driver-class-name: org.h2.Driver
     username: sa
     password: ""
 
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: ${JPA_DDL_AUTO:update}
     open-in-view: false
     properties:
       hibernate:

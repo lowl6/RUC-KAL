@@ -15,6 +15,8 @@ export const workspaceApi = {
   create: (payload) => api.post('/workspaces', payload),
   update: (id, payload) => api.patch(`/workspaces/${id}`, payload),
   patchProgress: (id, payload) => api.patch(`/workspaces/${id}/progress`, payload),
+  staffMembers: () => api.get('/workspaces/staff'),
+  assignStaff: (id, staffId) => api.patch(`/workspaces/${id}/staff`, { staffId }),
 
   addMember: (id, payload) => api.post(`/workspaces/${id}/members`, payload),
   removeMember: (id, uid) => api.delete(`/workspaces/${id}/members/${uid}`),

@@ -111,7 +111,18 @@ public class WorkspaceController {
         return ApiResponse.ok(svc.changeTicketStatus(CurrentUser.requireUserId(), tid, req.status()));
     }
 
-    /* ============== Staff 工作台（admin / super_admin / staff 都可访问） ============== */
+    @GetMapping("/workspaces/staff")
+    public ApiResponse<List<StaffView>> activeStaff() {
+        return ApiResponse.ok(svc.listActiveStaff());
+    }
+
+    @PatchMapping("/workspaces/{id}/staff")
+    public ApiResponse<WorkspaceListItem> assignStaff(@PathVariable("id") String id,
+                                                      @RequestBody AssignStaffReq req) {
+        return ApiResponse.ok(svc.assignStaff(CurrentUser.requireUserId(), id, req));
+    }
+
+    /* ============== Staff 工作台（仅 staff 账号可访问；管理员仍走 /api/v1/admin/**） ============== */
 
     @GetMapping("/staff/tickets")
     public ApiResponse<PageResult<TicketSummary>> staffTickets(
@@ -133,7 +144,7 @@ public class WorkspaceController {
 
     private static void ensureStaff() {
         var p = CurrentUser.require();
-        if (!("staff".equals(p.getRole()) || "admin".equals(p.getRole()) || "super_admin".equals(p.getRole()))) {
+        if (!"staff".equals(p.getRole())) {
             throw new cn.edu.ruc.kal.common.BizException(403, "无工作人员权限");
         }
     }

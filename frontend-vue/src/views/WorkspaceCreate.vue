@@ -1,7 +1,8 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { workspaceApi, PHASES } from '@/api/workspace'
+import { competitionsApi } from '@/api/projects'
 import Icon from '@/components/Icon.vue'
 
 const router = useRouter()
@@ -10,11 +11,76 @@ const form = ref({
   summary: '',
   competitionShort: '',
   competitionTarget: '',
+  assignedStaffId: '',
   phase: 'idea',
   progress: 0,
 })
 const submitting = ref(false)
 const error = ref('')
+const staffList = ref([])
+const competitions = ref([])
+const competitionMode = ref('select') // select | custom
+const selectedCompetitionId = ref('')
+
+const selectedCompetition = computed(() =>
+  competitions.value.find(c => c.competitionId === selectedCompetitionId.value) || null
+)
+
+const competitionOptions = computed(() =>
+  competitions.value
+    .filter(c => c.status !== 'ended')
+    .sort((a, b) => String(a.registerEnd || '').localeCompare(String(b.registerEnd || '')))
+)
+
+const timelineSteps = computed(() => {
+  const c = selectedCompetition.value
+  if (!c) return []
+  return [
+    { label: '报名开始', date: c.registerStart, state: stepState(c.registerStart) },
+    { label: '报名截止', date: c.registerEnd, state: stepState(c.registerEnd) },
+    { label: '赛事日程', date: c.scheduleNote || '查看通知', state: 'note' },
+  ]
+})
+
+function daysLeft (dateLike) {
+  if (!dateLike) return null
+  const d = new Date(dateLike)
+  if (Number.isNaN(d.getTime())) return null
+  return Math.ceil((d.getTime() - Date.now()) / 86400000)
+}
+
+function stepState (dateLike) {
+  const left = daysLeft(dateLike)
+  if (left == null) return 'muted'
+  if (left < 0) return 'done'
+  if (left <= 7) return 'urgent'
+  return 'open'
+}
+
+function statusLabel (s) {
+  return ({ upcoming: '即将开放', active: '报名中', urgent: '即将截止', ended: '已结束' })[s] || s
+}
+
+function applyCompetition (c) {
+  selectedCompetitionId.value = c.competitionId
+  form.value.competitionShort = c.shortName || c.name
+  form.value.competitionTarget = form.value.competitionTarget || (c.level === 'national' ? '国赛入围 / 校赛推荐' : '完成校赛提交')
+}
+
+async function loadOptions () {
+  try {
+    const [cs, staff] = await Promise.all([
+      competitionsApi.list().catch(() => []),
+      workspaceApi.staffMembers().catch(() => []),
+    ])
+    competitions.value = cs || []
+    staffList.value = staff || []
+  } catch (e) {
+    // 选项加载失败不阻断项目创建，仍可手动填写
+  }
+}
+
+onMounted(loadOptions)
 
 async function submit () {
   error.value = ''
@@ -26,6 +92,7 @@ async function submit () {
       summary: form.value.summary.trim(),
       competitionShort: form.value.competitionShort.trim(),
       competitionTarget: form.value.competitionTarget.trim(),
+      assignedStaffId: form.value.assignedStaffId || '',
       phase: form.value.phase,
       progress: Number(form.value.progress) || 0,
     })
@@ -61,14 +128,83 @@ function cancel () { router.back() }
         <input id="kwc-summary" class="kal-input" v-model="form.summary" placeholder="让队友与工作人员一眼看懂你们在做什么" maxlength="200" />
       </div>
 
+      <div class="kal-field">
+        <label class="kal-label">关联比赛</label>
+        <div class="kwc-mode">
+          <button type="button" class="kwc-mode-btn" :class="{ 'is-active': competitionMode === 'select' }" @click="competitionMode = 'select'">
+            从比赛中心选择
+          </button>
+          <button type="button" class="kwc-mode-btn" :class="{ 'is-active': competitionMode === 'custom' }" @click="competitionMode = 'custom'">
+            手动填写
+          </button>
+        </div>
+
+        <div v-if="competitionMode === 'select'" class="kwc-comp-grid">
+          <button
+            v-for="c in competitionOptions"
+            :key="c.competitionId"
+            type="button"
+            class="kwc-comp-card"
+            :class="{ 'is-active': selectedCompetitionId === c.competitionId }"
+            @click="applyCompetition(c)"
+          >
+            <span class="kwc-comp-initial">{{ c.initial || (c.shortName || c.name)?.[0] || '赛' }}</span>
+            <span class="kwc-comp-body">
+              <strong>{{ c.shortName || c.name }}</strong>
+              <small>{{ statusLabel(c.status) }} · 截止 {{ c.registerEnd || '待定' }}</small>
+            </span>
+            <span v-if="daysLeft(c.registerEnd) !== null" class="kwc-comp-days" :class="{ 'is-urgent': daysLeft(c.registerEnd) <= 7 }">
+              {{ daysLeft(c.registerEnd) >= 0 ? `${daysLeft(c.registerEnd)}天` : '已过期' }}
+            </span>
+          </button>
+        </div>
+
+        <div v-if="competitionMode === 'custom' || !competitionOptions.length" class="kal-grid-2 kwc-custom-comp">
+          <div class="kal-field">
+            <label class="kal-label" for="kwc-comp">比赛名称</label>
+            <input id="kwc-comp" class="kal-input" v-model="form.competitionShort" placeholder="如：中国国际大学生创新大赛" />
+          </div>
+          <div class="kal-field">
+            <label class="kal-label" for="kwc-target">目标</label>
+            <input id="kwc-target" class="kal-input" v-model="form.competitionTarget" placeholder="如：校赛一等奖 / 推荐至省赛" />
+          </div>
+        </div>
+
+        <div v-if="selectedCompetition && competitionMode === 'select'" class="kwc-timeline">
+          <header class="kwc-timeline-head">
+            <div>
+              <span class="kwc-timeline-kicker">Competition Timeline</span>
+              <h3>{{ selectedCompetition.name }}</h3>
+            </div>
+            <span class="kwc-timeline-status">{{ statusLabel(selectedCompetition.status) }}</span>
+          </header>
+          <div class="kwc-timeline-steps">
+            <div v-for="s in timelineSteps" :key="s.label" class="kwc-timeline-step" :class="`is-${s.state}`">
+              <span class="kwc-timeline-dot"></span>
+              <div>
+                <strong>{{ s.label }}</strong>
+                <small>{{ s.date || '待定' }}</small>
+              </div>
+            </div>
+          </div>
+          <p v-if="selectedCompetition.description" class="kwc-timeline-desc">{{ selectedCompetition.description }}</p>
+        </div>
+      </div>
+
       <div class="kal-grid-2">
         <div class="kal-field">
-          <label class="kal-label" for="kwc-comp">关联比赛（可空）</label>
-          <input id="kwc-comp" class="kal-input" v-model="form.competitionShort" placeholder="如：中国国际大学生创新大赛" />
+          <label class="kal-label">项目目标</label>
+          <input class="kal-input" v-model="form.competitionTarget" placeholder="如：校赛一等奖 / 推荐至省赛" />
         </div>
         <div class="kal-field">
-          <label class="kal-label" for="kwc-target">目标</label>
-          <input id="kwc-target" class="kal-input" v-model="form.competitionTarget" placeholder="如：校赛一等奖 / 推荐至省赛" />
+          <label class="kal-label">对接工作人员</label>
+          <select class="kal-input" v-model="form.assignedStaffId">
+            <option value="">暂不指定，提交工单时由工作人员认领</option>
+            <option v-for="s in staffList" :key="s.userId" :value="s.userId">
+              {{ s.displayName }} · {{ s.deptName || '工作人员' }}
+            </option>
+          </select>
+          <div class="kal-hint">只展示管理员手动创建的工作人员账号，不包含管理员账号。</div>
         </div>
       </div>
 
@@ -133,6 +269,154 @@ function cancel () { router.back() }
   flex-direction: column;
   gap: 22px;
 }
+
+.kwc-mode {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px;
+  margin-bottom: 12px;
+  background: var(--kal-bg-subtle);
+  border: 1px solid var(--kal-border);
+  border-radius: var(--kal-radius-sm);
+}
+.kwc-mode-btn {
+  border: 0;
+  background: transparent;
+  padding: 7px 14px;
+  border-radius: var(--kal-radius-xs);
+  color: var(--kal-text-muted);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+.kwc-mode-btn.is-active { background: var(--kal-ink); color: #fff; }
+
+.kwc-comp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+.kwc-comp-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--kal-border);
+  border-radius: var(--kal-radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--kal-duration-2);
+}
+.kwc-comp-card:hover { border-color: var(--kal-primary-300); transform: translateY(-1px); }
+.kwc-comp-card.is-active {
+  border-color: var(--kal-primary-600);
+  background: linear-gradient(180deg, #fff 0%, var(--kal-primary-50) 100%);
+  box-shadow: 0 10px 24px rgba(134, 26, 18, 0.08);
+}
+.kwc-comp-initial {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: var(--kal-radius-sm);
+  background: var(--kal-ink);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--kal-font-serif);
+  font-size: 15px;
+  font-weight: 600;
+}
+.kwc-comp-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.kwc-comp-body strong {
+  color: var(--kal-text-strong);
+  font-size: 13.5px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kwc-comp-body small { color: var(--kal-text-subtle); font-size: 11.5px; letter-spacing: 0.3px; }
+.kwc-comp-days {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--kal-bg-subtle);
+  color: var(--kal-text-muted);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+.kwc-comp-days.is-urgent { background: var(--kal-primary-50); color: var(--kal-primary-700); font-weight: 600; }
+.kwc-custom-comp { margin-top: 4px; }
+
+.kwc-timeline {
+  margin-top: 14px;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, var(--kal-paper) 0%, #fff 100%);
+  border: 1px solid var(--kal-border);
+  border-radius: var(--kal-radius-md);
+}
+.kwc-timeline-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.kwc-timeline-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--kal-text-subtle);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+.kwc-timeline-head h3 {
+  margin: 0;
+  font-family: var(--kal-font-serif);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--kal-text-strong);
+}
+.kwc-timeline-status {
+  align-self: flex-start;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--kal-primary-50);
+  color: var(--kal-primary-700);
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+.kwc-timeline-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.kwc-timeline-step {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.72);
+  border: 1px solid var(--kal-divider);
+  border-radius: var(--kal-radius-sm);
+}
+.kwc-timeline-dot {
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--kal-text-subtle);
+  flex-shrink: 0;
+}
+.kwc-timeline-step.is-open .kwc-timeline-dot { background: var(--kal-success); }
+.kwc-timeline-step.is-urgent .kwc-timeline-dot { background: var(--kal-primary-600); }
+.kwc-timeline-step.is-done .kwc-timeline-dot { background: var(--kal-sand); }
+.kwc-timeline-step strong { display: block; font-size: 12px; color: var(--kal-text-strong); letter-spacing: 0.5px; }
+.kwc-timeline-step small { display: block; margin-top: 3px; font-size: 11px; color: var(--kal-text-subtle); line-height: 1.4; }
+.kwc-timeline-desc { margin: 12px 0 0; color: var(--kal-text-muted); font-size: 12.5px; line-height: 1.7; }
 
 .kwc-phases {
   display: grid;

@@ -20,6 +20,10 @@ tok.txt
 # Java / Maven
 backend/target/
 **/target/
+backend/data/
+backend/*.db
+backend/*.mv.db
+backend/*.trace.db
 
 # Node / Vite
 frontend-vue/node_modules/
