@@ -314,6 +314,7 @@ onBeforeUnmount(() => {
 .km-list {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   border-right: 1px solid var(--kal-divider);
   background: var(--kal-bg-subtle);
 }
@@ -419,7 +420,11 @@ onBeforeUnmount(() => {
 }
 
 /* ---------- Chat ---------- */
-.km-chat { display: flex; flex-direction: column; }
+.km-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .km-chat-head {
   display: flex;
   align-items: center;
@@ -458,6 +463,7 @@ onBeforeUnmount(() => {
 
 .km-msgs {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 28px;
   display: flex;
